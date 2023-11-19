@@ -1,0 +1,218 @@
+[gd_scene load_steps=6 format=3 uid="uid://c0fveh3kfbo35"]
+
+[ext_resource type="Script" path="res://main.gd" id="1_3lsry"]
+[ext_resource type="PackedScene" uid="uid://cbpp4yno4vqkb" path="res://scenes/user_offer.tscn" id="2_l2hia"]
+[ext_resource type="Script" path="res://scripts/offer_panel.gd" id="2_t0c0x"]
+[ext_resource type="Script" path="res://scripts/connection_input.gd" id="2_yjbxi"]
+[ext_resource type="Script" path="res://scripts/answer_panel.gd" id="4_p5d3a"]
+
+[node name="HBox" type="MarginContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_3lsry")
+user_offer_scene = ExtResource("2_l2hia")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Log" type="TextEdit" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+editable = false
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+
+[node name="Input" type="TextEdit" parent="VBox/HBoxContainer"]
+custom_minimum_size = Vector2(200, 50)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Send" type="Button" parent="VBox/HBoxContainer"]
+layout_mode = 2
+text = "Send"
+
+[node name="Connect" type="Button" parent="VBox/HBoxContainer"]
+layout_mode = 2
+text = "Connect
+"
+
+[node name="ShowOpen" type="Button" parent="VBox/HBoxContainer"]
+layout_mode = 2
+text = "Open"
+
+[node name="Open" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Open"]
+layout_mode = 2
+
+[node name="UserAnswers" type="VBoxContainer" parent="Open/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label" type="Label" parent="Open/HBox/UserAnswers"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Answers
+"
+horizontal_alignment = 1
+
+[node name="VSeparator" type="VSeparator" parent="Open/HBox"]
+layout_mode = 2
+
+[node name="UserOffers" type="VBoxContainer" parent="Open/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label" type="Label" parent="Open/HBox/UserOffers"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Offers"
+horizontal_alignment = 1
+
+[node name="Node" type="Node" parent="Open"]
+
+[node name="Control" type="Control" parent="Open"]
+layout_mode = 2
+
+[node name="Close" type="Button" parent="Open/Control"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -18.0
+offset_bottom = 31.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+text = "X"
+
+[node name="ConnectionInput" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 2
+script = ExtResource("2_yjbxi")
+
+[node name="HBox" type="HBoxContainer" parent="ConnectionInput"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="InputText" type="TextEdit" parent="ConnectionInput/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ConnectionInput/HBox"]
+layout_mode = 2
+
+[node name="Enter" type="Button" parent="ConnectionInput/HBox/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Enter
+"
+
+[node name="Paste" type="Button" parent="ConnectionInput/HBox/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Paste
+"
+
+[node name="Close" type="Button" parent="ConnectionInput/HBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+text = "X"
+
+[node name="OfferPanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(200, 50)
+layout_mode = 2
+script = ExtResource("2_t0c0x")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="OfferPanel"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OfferPanel/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OfferHBoxContainer" type="HBoxContainer" parent="OfferPanel/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="OfferText" type="TextEdit" parent="OfferPanel/HBoxContainer/VBoxContainer/OfferHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Copy" type="Button" parent="OfferPanel/HBoxContainer/VBoxContainer/OfferHBoxContainer"]
+layout_mode = 2
+text = "Copy"
+
+[node name="AnswerHBox" type="HBoxContainer" parent="OfferPanel/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AnswerText" type="TextEdit" parent="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox"]
+layout_mode = 2
+
+[node name="Enter" type="Button" parent="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Enter
+"
+
+[node name="Paste" type="Button" parent="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Paste
+"
+
+[node name="Close" type="Button" parent="OfferPanel/HBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+text = "X"
+
+[node name="AnswerPanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(200, 50)
+layout_mode = 2
+script = ExtResource("4_p5d3a")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="AnswerPanel"]
+layout_mode = 2
+
+[node name="OutgoingText" type="TextEdit" parent="AnswerPanel/HBoxContainer"]
+custom_minimum_size = Vector2(300, 150)
+layout_mode = 2
+size_flags_horizontal = 3
+editable = false
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AnswerPanel/HBoxContainer"]
+layout_mode = 2
+
+[node name="Copy" type="Button" parent="AnswerPanel/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Paste"
+
+[node name="Close" type="Button" parent="AnswerPanel/HBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+text = "X"
+
+[connection signal="pressed" from="VBox/HBoxContainer/Connect" to="." method="_on_connect_pressed"]
+[connection signal="pressed" from="VBox/HBoxContainer/ShowOpen" to="." method="_on_show_open_pressed"]
+[connection signal="pressed" from="Open/Control/Close" to="." method="_on_open_close_pressed"]
+[connection signal="request_offer" from="ConnectionInput" to="." method="_on_connection_input_request_offer"]
+[connection signal="text_changed" from="ConnectionInput/HBox/InputText" to="ConnectionInput" method="_on_input_text_text_changed"]
+[connection signal="pressed" from="ConnectionInput/HBox/VBoxContainer/Enter" to="ConnectionInput" method="_on_enter_pressed"]
+[connection signal="pressed" from="ConnectionInput/HBox/VBoxContainer/Paste" to="ConnectionInput" method="_on_paste_pressed"]
+[connection signal="pressed" from="ConnectionInput/HBox/Close" to="ConnectionInput" method="_on_close_pressed"]
+[connection signal="pressed" from="OfferPanel/HBoxContainer/Close" to="OfferPanel" method="_on_close_pressed"]
+[connection signal="pressed" from="AnswerPanel/HBoxContainer/VBoxContainer/Copy" to="AnswerPanel" method="_on_copy_pressed"]
+[connection signal="pressed" from="AnswerPanel/HBoxContainer/Close" to="AnswerPanel" method="_on_close_pressed"]
