@@ -1,8 +1,8 @@
 extends Control
-@onready var offer_widget = $OfferPanel
-
 @export var user_offer_scene: PackedScene
 
+@onready var gui_answer_panel : = $AnswerPanel
+@onready var gui_offer_panel : = $OfferPanel
 var network : P2PNetwork
 var showed_offer: String
 
@@ -31,42 +31,45 @@ func create_offer():
 	var offer =  network.get_incoming_by_id(id)
 	var offer_scene = user_offer_scene.instantiate()
 	offer_scene.set_id(id)
-	offer_scene.connect("request_offer_copy", request_offer_copy)
+	offer_scene.connect("request_show_copy", on_request_offer_show)
+	offer_scene.connect("request_offer_copy", on_request_offer_copy)
 	offer.connect("offer_generated", on_incoming_offer_generated)
 	offer.create_offer()
 	$Open/HBox/UserOffers.add_child(offer_scene)
 	
 
 
-func request_offer_copy(id):
+func on_request_offer_copy(id):
+	logy("error", "[main:43]on_request_offer_copy(id)")
 	var jsoned = network.get_offer_by_id(id).get_json()
 	if jsoned:
 		DisplayServer.clipboard_set(jsoned)
 	else:
-		logy("error", "[main:46]failed to get JSON for offer " + str(id))
+		logy("error", "[main:48]failed to get JSON for offer " + str(id))
 
 
-func request_offer_show(id):
+func on_request_offer_show(id):
+	logy("error", "[main:52]on_request_offer_show(id)")
 	var jsoned = network.get_offer_by_id(id).get_json()
 	if jsoned:
 		showed_offer = id
-		offer_widget.set_offer(jsoned)
+		gui_offer_panel.set_offer(jsoned)
 	else:
-		logy("error", "[main:55]failed to get JSON for offer " + str(id))
+		logy("error", "[main:58]failed to get JSON for offer " + str(id))
 
 
 
 func _on_connection_input_request_offer():
-	logy("trace", "[main:60]_on_connection_input_request_offer()")
+	logy("trace", "[main:63]_on_connection_input_request_offer()")
 	create_offer()
 
 
 func on_incoming_offer_generated(dict_offer):
-	logy("trace", "[main:65] on_offer_generated(offer)")
+	logy("trace", "[main:68] on_offer_generated(offer)")
 	if dict_offer.ID == showed_offer:
 		var jsoned = network.get_offer_json_by_id(dict_offer.ID);
 		if jsoned:
-			offer_widget.set_offer(jsoned)
+			gui_offer_panel.set_offer(jsoned)
 
 
 func _on_show_open_pressed():
@@ -75,7 +78,7 @@ func _on_show_open_pressed():
 
 
 func _on_open_close_pressed():
-	logy("trace", "[main:78]_on_open_close_pressed()")
+	logy("trace", "[main:81]_on_open_close_pressed()")
 	$Open.hide()
 	pass # Replace with function body.
 

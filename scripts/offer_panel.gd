@@ -1,28 +1,32 @@
 extends PanelContainer
+signal  connetion(msg: String)
 
-
-# Called when the node enters the scene tree for the first time.
-func _ready():
-	
-	pass # Replace with function body.
-
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta):
-	pass
+@onready var gui_answer_text = $HBoxContainer/VBoxContainer/AnswerHBox/AnswerText
+@onready var gui_offer_text = $HBoxContainer/VBoxContainer/OfferHBoxContainer/OfferText
 
 func set_offer(msg:String):
-	$HBoxContainer/VBoxContainer/OfferHBoxContainer/OfferText.text = msg
+	gui_offer_text.text = msg
 	show()
 
 func copy_offer_to_clipboard():
-	DisplayServer.clipboard_set($HBoxContainer/VBoxContainer/OfferHBoxContainer/OfferText.text)
+	DisplayServer.clipboard_set(gui_offer_text.text)
 
 
 func _on_close_pressed():
-	logy("trace", "[offer_panel:23]_on_close_pressed()")
+	logy("trace", "[offer_panel:25]_on_close_pressed()")
 	hide()
 	pass # Replace with function body.
+
+
+func _on_enter_pressed():
+	if gui_answer_text.text != "":
+		emit_signal("connection", gui_answer_text.text)
+
+
+func _on_paste_pressed():
+	gui_answer_text.text = DisplayServer.clipboard_get()
+	if gui_answer_text.text != "":
+		emit_signal("connection", gui_answer_text.text)
 
 
 func logy(lvl, msg):

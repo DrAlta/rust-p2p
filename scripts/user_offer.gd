@@ -16,7 +16,13 @@ func set_id(id_arg: String):
 	$HBoxContainer/Label.text = id_arg
 
 func on_copy_button_pressed():
+	logy("trace", "[user_offer:19]on_copy_button_pressed()")
 	emit_signal("request_offer_copy", id)
 	
 func on_show_button_pressed():
+	logy("trace", "[user_offer:23]on_show_button_pressed()")
 	emit_signal("request_offer_show", id)
+
+
+func logy(lvl, msg):
+	print(lvl, msg)
