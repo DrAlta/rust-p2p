@@ -62,8 +62,8 @@ func add_ice_candidate(a,b,c):
 	connection.add_ice_candidate(a,b,c)
 
 
-func set_remote_description(type, data):
-	connection.set_remote_description(type, data)
+func set_remote_description(type: String, sdp: String):
+	connection.set_remote_description(type, sdp)
 
 
 func on_new_ice_candidate(mid_name, index_name, sdp_name):
@@ -74,8 +74,8 @@ func on_new_ice_candidate(mid_name, index_name, sdp_name):
 
 func on_session_description_created(type, data):
 	logy("trace", "[link:76]on_session_description_created()")
+	connection.set_local_description(type, data)
 	if type == "offer": 
-		connection.set_local_description(type, data)
 		emit_signal("offer_generated", {"ID" : id, "Offer" : data})
 	elif type == "answer":
 		emit_signal("answer_generated", {"ID" : id, "Answer" : data})
@@ -83,6 +83,6 @@ func on_session_description_created(type, data):
 		logy("impossible", "[link:83]This shouldn't happen")
 
 
-func logy(lvl, msg):
+func logy(lvl: String, msg: String):
 	print(lvl, msg)
 

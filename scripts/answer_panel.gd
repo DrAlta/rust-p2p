@@ -13,5 +13,5 @@ func _on_copy_pressed():
 	DisplayServer.clipboard_set($HBoxContainer/OutgoingText.text)
 
 
-func logy(lvl, msg):
+func logy(lvl: String, msg: String):
 	print(lvl, msg)

@@ -12,6 +12,9 @@ func _init(id_arg: String):
 	link.connect("new_ice_candidate", on_new_ice_candidate)
 
 
+func add_ice_candidate(media: String, index: int, name:String):
+	link.add_ice_candidate(media, index, name)
+
 
 func close():
 	link.close()
@@ -53,5 +56,5 @@ func on_offer_generated(dict_offer):
 	offer = dict_offer.Offer
 	emit_signal("offer_generated", {"ID" : dict_offer.ID, "Offer" : dict_offer.Offer, "ICE" : link.ice})
 
-func logy(lvl, msg):
+func logy(lvl: String, msg: String):
 	print(lvl, msg)

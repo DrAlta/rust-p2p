@@ -5,9 +5,25 @@ var my_version = "0.0"
 var my_id : String
 
 var open_incoming : = {}
+var open_outgoing : = {}
 
-var my_peers : = {}
+#{id: link}
+var my_neighbors : = {}
 
+
+
+func _init():
+	my_id = str(randi())
+
+
+func _process(_delta):
+	#logy("trace", "[network:43]_process()")
+	for key in open_incoming:
+		var incoming = open_incoming[key]
+		process_incoming(incoming)
+	for key in open_outgoing:
+		var outgoing = open_outgoing[key]
+		process_outgoing(outgoing)
 
 
 func create_incoming() -> String:
@@ -16,38 +32,54 @@ func create_incoming() -> String:
 	open_incoming[id] = incoming
 	return id
 
+
+func create_outgoing(offer_id: String) -> String:
+	var id : = "Outgoing" + str(open_outgoing.size())
+	var outgoing= P2POutgoing.new(id, offer_id)
+	open_outgoing[id] = outgoing
+	return id
+
+
+func get_answer_json_by_id(id: String):
+	if open_outgoing.has(id):
+		var outgoing = open_outgoing[id]
+		if outgoing.answer != "":
+			return JSON.stringify({"Source": my_id, "Destination": outgoing.id, "Answer" : outgoing.answer, "ICE" : outgoing.link.ice})
+		else:
+			logy("error", "[network:33]asked for JSONfied of offer"+  str(id) + " but doesn't have a webRTC offer yet")
+		return null
+	else:
+		logy("error", "[network:68]asked for JSONfied of offer"+  str(id) + " but it doesn't exist")
+	return null
+
+
 func get_incoming_by_id(id: String) -> P2PIncoming:
-	var incoming = open_incoming[id]
-	if incoming:
-		return incoming
+	if open_incoming.has(id):
+		return open_incoming[id]
 	else:
 		print("tried to get P2PIncoming ", id, " which doesn't exist")
 		return null
 
 
-func get_offer_json_by_id(id: String):
-	var incoming = open_incoming[id]
-	if incoming.offer != "":
-		return JSON.stringify({"Source": my_id, "ID" : incoming.link.id, "Offer" : incoming.offer, "ICE" : incoming.link.ice})
+func get_outgoing_by_id(id: String) -> P2POutgoing:
+	if open_outgoing.has(id):
+		return open_outgoing[id]
 	else:
-		logy("error", "[network:33]asked for JSONfied of offer"+  str(id) + " but doesn't have a webRTC offer yet")
+		print("tried to get P2POutgoing ", id, " which doesn't exist")
 		return null
 
 
-func _init():
-	my_id = str(randi())
-
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(_delta):
-	#logy("trace", "[network:43]_process()")
-	for key in open_incoming:
-		var incoming = open_incoming[key]
-		process_incoming(incoming)
-
-
-func logy(lvl, msg):
-	print(lvl, msg)
+func get_offer_json_by_id(id: String):
+	if open_incoming.has(id):
+		var incoming = open_incoming[id]
+		if incoming.offer != "":
+			return JSON.stringify({"Destination": my_id, "ID" : incoming.link.id, "Offer" : incoming.offer, "ICE" : incoming.link.ice})
+		else:
+			logy("error", "[network:33]asked for JSONfied of offer"+  str(id) + " but doesn't have a webRTC offer yet")
+		return null
+	else:
+		logy("error", "[network:68]asked for JSONfied of offer"+  str(id) + " but it doesn't exist")
+	return null
 
 
 func process_incoming(incoming:P2PIncoming):
@@ -65,7 +97,7 @@ func process_incoming(incoming:P2PIncoming):
 							incoming.send(JSON.stringify({"Type":"UnknownVersion"}))
 						else:
 							var new_id = str(who)
-							if new_id in my_peers:
+							if new_id in my_neighbors:
 								logy("bootstrap", "incoming " + str(incoming.link.id) + " introduced itself as " + str(who) + " again...")
 								incoming.send(JSON.stringify({"Type":"Not you again!"}))
 								remove_incoming(incoming.link.id)
@@ -73,11 +105,11 @@ func process_incoming(incoming:P2PIncoming):
 								logy("bootstrap", "incoming " + str(incoming.link.id) + " introduced itself as " + str(who))
 								open_incoming.erase(incoming.link.id)
 								incoming.link.id = new_id
-								my_peers[str(new_id)] = incoming.link
+								my_neighbors[str(new_id)] = incoming.link
 								incoming.free()
 					{"Type" : "Me", "Me" : var who}:
 						var new_id = str(who)
-						if new_id in my_peers:
+						if new_id in my_neighbors:
 							logy("bootstrap", "incoming " + str(incoming.link.id) + " identified itself as " + str(who) + " again...")
 							incoming.send(JSON.stringify({"Type":"Not you again!"}))
 							remove_incoming(incoming.link.id)
@@ -85,7 +117,7 @@ func process_incoming(incoming:P2PIncoming):
 							logy("bootstrap", "incoming " + str(incoming.link.id) + " identified itself as " + str(who))
 							open_incoming.erase(incoming.link.id)
 							incoming.link.id = new_id
-							my_peers[str(new_id)] = incoming.link
+							my_neighbors[str(new_id)] = incoming.link
 							incoming.free()
 					{"Type" : "Who"}:
 						incoming.send(JSON.stringify({"Type":"Me", "Me": my_id}))
@@ -94,12 +126,169 @@ func process_incoming(incoming:P2PIncoming):
 						remove_incoming(incoming.link.id)
 			else:
 				logy("bootstrap_error", str(incoming.link.id) + " sent invaled message:" + raw_packet)
-					
+				incoming.send(JSON.stringify({"Type":"IvalidPacket"}))
+				remove_incoming(incoming.link.id)
+
+
+func process_outgoing(outgoing:P2POutgoing):
+	outgoing.poll()
+	if outgoing.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
+		if not outgoing.greeted_ka:
+			outgoing.send(JSON.stringify({"Type":"Greetings", "Me": my_id, "Version": my_version}))
+		if outgoing.get_available_packet_count() > 0:
+			var raw_packet = outgoing.get_packet()
+			var packet = JSON.parse_string(raw_packet)
+			if packet:
+				match packet:
+					{"Type" : "Greeting", "Me" : var who, "Version": var version}:
+						if version != my_version:
+							outgoing.send(JSON.stringify({"Type":"UnknownVersion"}))
+						else:
+							var new_id = str(who)
+							if new_id != outgoing.link.id:
+								logy("bootstrap", "outgoing " + str(outgoing.link.id) + " introduced itself as " + str(who))
+							else:
+								logy("bootstrap", "outgoing " + str(outgoing.link.id) + " introduced itself as " + str(who))
+							if my_neighbors.has(new_id):
+								say_goodbye_to(new_id)
+							open_outgoing.erase(outgoing.link.id)
+							outgoing.link.id = new_id
+							my_neighbors[new_id] = outgoing.link
+							outgoing.free()
+					{"Type" : "Who"}:
+						outgoing.send(JSON.stringify({"Type":"Me", "Me": my_id}))
+					_ :
+						logy("bootstrap_error", str(outgoing.link.id) + " sent unhandleed message:" + raw_packet)
+						outgoing.send(JSON.stringify({"Type":"IvalidSalutation"}))
+						remove_outgoing(outgoing.link.id)
+			else:
+				logy("bootstrap_error", str(outgoing.link.id) + " sent invaled message:" + raw_packet)
+				outgoing.send(JSON.stringify({"Type":"IvalidPacket"}))
+				remove_outgoing(outgoing.link.id)
+
+func process_packet(packet:Dictionary):
+	match packet:
+		{"Destination": my_id, "Source": var source, "Type" : "Who"}:
+			logy("error", "[newtork:172] processing Who packet")
+			send({"Source": my_id, "Destination": source, "Type":"Me", "Me": my_id})
+		{"Source": my_id, "Destination": var dest, "Type": "Answer", "Answer": var answer, "OfferID": var offer_id, "ICE": var ice}:
+			logy("error", "[newtork:175] processing Answer packet")
+			if open_incoming.has(offer_id):
+				var incoming = open_incoming[offer_id]
+				incoming.set_remote_description("answer", answer)
+				for thing in ice:
+					incoming.add_ice_candidate(thing.Media, thing.Index, thing.Name)
+				pass
+		{"Destination": my_id, "Source": var source, "Type": "Offer", "OfferID" : var offer_id, "Offer" : var offer, "ICE" : var ice,}:
+			logy("error", "[newtork:183] processing Offer packet")
+			var id = create_outgoing(offer_id)
+			var outgoing: P2POutgoing = get_outgoing_by_id(id)
+			outgoing.connect("answer_generated", on_outgoing_first_answer_generated)
+			outgoing.connect("new_ice_candidate", on_outgoing_new_ice_candidate)
+			outgoing.set_remote_description("offer", offer)
+			for thing in ice:
+				outgoing.add_ice_candidate(thing.Media, thing.Index, thing.Name)
+		{"Destination": my_id, .. }:
+			logy("error", "[newtork:192]" + str(packet.Source) + " sent me unhandleed message:" + str(packet.keys()))
+		{"Destination": _, .. }:
+			send(packet)
+		_:
+			logy("error", "[newtork:196]" + str(packet.Source) + " sent unhandleed message:" + str(packet.keys()))
+
+
 func remove_incoming(id:String):
-	var incoming = open_incoming[id]
-	if incoming:
+	if open_incoming.has(id):
+		var incoming = open_incoming[id]
 		incoming.close()
 		open_incoming.erase(id)
 		incoming.free()
 
-			
+
+func remove_outgoing(id:String):
+	if open_outgoing.has(id):
+		var outgoing = open_outgoing[id]
+		outgoing.close()
+		open_outgoing.erase(id)
+		outgoing.free()
+
+
+func say_goodbye_to(id: String):
+	if my_neighbors.has(id):
+		var link: P2PLink = my_neighbors[id]
+		link.send(JSON.stringify({"Type":"Goodbye"}))
+		link.close()
+		my_neighbors.erase(id)
+
+
+func send(packet: Dictionary):
+	logy("trace", "[network:116]send()")
+	if packet.has("Destination"):
+		var dest = str(packet.Destination)
+		if my_neighbors.has(dest):
+			var link: P2PLink = my_neighbors[dest]
+			var jsoned := JSON.stringify(packet)
+			link.send(jsoned)
+		else:
+			logy("error", "[network:124]No known route to" + str(dest))
+	else:
+		logy("error", "[network:126]Packet has no Destination")
+	
+
+
+func user_packet(msg):
+	var packet = JSON.parse_string(msg)
+	if packet:
+		if not packet.has("Source"):
+			packet.Source = "User"
+		process_packet(packet)
+	else:
+		logy("error", "Could parse user packet as json")
+
+
+func on_outgoing_answer_generated(dict_answer: Dictionary):
+	if open_outgoing.has(dict_answer.ID):
+		var outgoing = open_outgoing[dict_answer.ID]
+		if outgoing.destination == "":
+			emit_signal("user_answer", dict_answer)
+		else:
+			logy("error", "[network:243] got an `answer_generated` tha wasn't from a user into the user handler")
+	else:
+		logy("error", "[network:245] got an `answer_generated` for" + str(dict_answer.ID) + "which I couldn't find")
+
+func on_outgoing_first_answer_generated(dict_answer: Dictionary):
+	if open_outgoing.has(dict_answer.ID):
+		var outgoing = open_outgoing[dict_answer.ID]
+		if outgoing.destination == "":
+			logy("error", "[network:251] got an `answer_generated` tha was from a user into the peer handler")
+		else:
+			send({"Source": my_id, "Destination": outgoing.destination, "Type": "Answer", "Answer": dict_answer.Answer, "OfferID": dict_answer.OfferID, "ICE": dict_answer.ICE})
+	else:
+		logy("error", "[network:256] Couldn't find outgoing with id" + str(dict_answer.ID))
+
+
+func on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name):
+	if open_outgoing.has(id):
+		var outgoing = open_outgoing[id]
+		if outgoing.destination == "":
+			logy("error", "[network:261] an `new_ice_candidate` from a user got into the peer handler")
+		else:
+			send({
+				"Source": my_id, 
+				"Destination": outgoing.destination, 
+				"Type": "newICE", 
+				"OfferID": offer_id, 
+				"ICE": [
+					{
+						"Media" : mid_name, 
+						"Index" : index_name, 
+						"Name" : sdp_name
+					}
+				]
+			})
+	else:
+		logy("error", "[network:279] Couldn't find outgoing with id" + str(id))
+
+
+func logy(lvl: String, msg: String):
+	print(lvl, msg)
+

@@ -30,5 +30,5 @@ func _on_input_text_text_changed():
 		$HBox/VBoxContainer/Enter.text = "Enter"
 
 
-func logy(lvl, msg):
-	print(lvl, msg)
+func logy(lvl: String, msg: String):
+	Logy.logy(lvl, msg)

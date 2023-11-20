@@ -1,6 +1,6 @@
 [gd_scene load_steps=6 format=3 uid="uid://c0fveh3kfbo35"]
 
-[ext_resource type="Script" path="res://main.gd" id="1_3lsry"]
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_8t0w3"]
 [ext_resource type="PackedScene" uid="uid://cbpp4yno4vqkb" path="res://scenes/user_offer.tscn" id="2_l2hia"]
 [ext_resource type="Script" path="res://scripts/offer_panel.gd" id="2_t0c0x"]
 [ext_resource type="Script" path="res://scripts/connection_input.gd" id="2_yjbxi"]
@@ -12,7 +12,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_3lsry")
+script = ExtResource("1_8t0w3")
 user_offer_scene = ExtResource("2_l2hia")
 
 [node name="VBox" type="VBoxContainer" parent="."]
@@ -215,11 +215,14 @@ text = "X"
 [connection signal="pressed" from="VBox/HBoxContainer/Connect" to="." method="_on_connect_pressed"]
 [connection signal="pressed" from="VBox/HBoxContainer/ShowOpen" to="." method="_on_show_open_pressed"]
 [connection signal="pressed" from="Open/Control/Close" to="." method="_on_open_close_pressed"]
+[connection signal="connection" from="ConnectionInput" to="." method="_on_connection"]
 [connection signal="request_offer" from="ConnectionInput" to="." method="_on_connection_input_request_offer"]
 [connection signal="text_changed" from="ConnectionInput/HBox/InputText" to="ConnectionInput" method="_on_input_text_text_changed"]
 [connection signal="pressed" from="ConnectionInput/HBox/VBoxContainer/Enter" to="ConnectionInput" method="_on_enter_pressed"]
 [connection signal="pressed" from="ConnectionInput/HBox/VBoxContainer/Paste" to="ConnectionInput" method="_on_paste_pressed"]
 [connection signal="pressed" from="ConnectionInput/HBox/Close" to="ConnectionInput" method="_on_close_pressed"]
+[connection signal="connection" from="OfferPanel" to="." method="_on_connection"]
+[connection signal="pressed" from="OfferPanel/HBoxContainer/VBoxContainer/OfferHBoxContainer/Copy" to="OfferPanel" method="_on_copy_pressed"]
 [connection signal="pressed" from="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox/VBoxContainer/Enter" to="OfferPanel" method="_on_enter_pressed"]
 [connection signal="pressed" from="OfferPanel/HBoxContainer/VBoxContainer/AnswerHBox/VBoxContainer/Paste" to="OfferPanel" method="_on_paste_pressed"]
 [connection signal="pressed" from="OfferPanel/HBoxContainer/Close" to="OfferPanel" method="_on_close_pressed"]

@@ -31,7 +31,7 @@ func create_offer():
 	var offer =  network.get_incoming_by_id(id)
 	var offer_scene = user_offer_scene.instantiate()
 	offer_scene.set_id(id)
-	offer_scene.connect("request_show_copy", on_request_offer_show)
+	offer_scene.connect("request_offer_show", on_request_offer_show)
 	offer_scene.connect("request_offer_copy", on_request_offer_copy)
 	offer.connect("offer_generated", on_incoming_offer_generated)
 	offer.create_offer()
@@ -73,20 +73,27 @@ func on_incoming_offer_generated(dict_offer):
 
 
 func _on_show_open_pressed():
+	logy("trace", "[main:76]_on_show_open_pressed()")
 	$Open.show()
 	pass # Replace with function body.
 
 
 func _on_open_close_pressed():
-	logy("trace", "[main:81]_on_open_close_pressed()")
+	logy("trace", "[main:82]_on_open_close_pressed()")
 	$Open.hide()
 	pass # Replace with function body.
 
 
 func _on_connect_pressed():
+	logy("trace", "[main:88]_on_connect_pressed()")
 	$ConnectionInput.show()
 	pass # Replace with function body.
 
 
-func logy(lvl, msg):
-	print(lvl, msg)
+func _on_connection(msg):
+	logy("trace", "[main:94]_on_connection()")
+	network.user_packet(msg)
+
+
+func logy(lvl: String, msg: String):
+	Logy.logy(lvl, msg)
