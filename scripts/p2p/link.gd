@@ -67,13 +67,13 @@ func set_remote_description(type: String, sdp: String):
 
 
 func on_new_ice_candidate(mid_name, index_name, sdp_name):
-	logy("trace", "[link:70]on_new_ice_candidate()")
+	logy("signal", "[link:70]on_new_ice_candidate()")
 	ice.append({"Media" : mid_name, "Index" : index_name, "Name" : sdp_name})
 	emit_signal("new_ice_candidate", id, mid_name, index_name, sdp_name)
 
 
 func on_session_description_created(type, data):
-	logy("trace", "[link:76]on_session_description_created()")
+	logy("signal", "[link:76]on_session_description_created()")
 	connection.set_local_description(type, data)
 	if type == "offer": 
 		emit_signal("offer_generated", {"ID" : id, "Offer" : data})

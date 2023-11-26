@@ -1,0 +1,68 @@
+# "Answer"
+func get_answer_json_by_id(id: String):
+{"Source": my_id, "Destination": outgoing.destination, "Type": "Answer", "Answer": outgoing.answer, "ICE" : outgoing.link.ice})
+func on_outgoing_answer_generated(dict_answer: Dictionary):
+{"Source": my_id, "Destination": outgoing.destination, "Type": "Answer", "Answer": dict_answer.Answer, "OfferID": dict_answer.OfferID, "ICE": dict_answer.ICE}
+func process_packet(packet:Dictionary):
+{"Destination": my_id,  "Source": _, "Type": "Answer", "Answer": var answer, "OfferID": var offer_id, "ICE": var ice}
+func on_outgoing_answer_generated(dict_answer: Dictionary):
+{"Source": my_id, "Destination": outgoing.destination, "Type": "Answer", "Answer": dict_answer.Answer, "OfferID": dict_answer.OfferID, "ICE": dict_answer.ICE}
+
+
+# "Offer"
+func get_offer_json_by_id(id: String):
+{"Destination": my_id, "Type": "Offer", "OfferID" : incoming.link.id, "Offer" : incoming.offer, "ICE" : incoming.link.ice})
+func process_packet(packet:Dictionary):
+{"Destination": my_id, "Source": var source, "Type": "Offer", "OfferID" : var offer_id, "Offer" : var offer, "ICE" : var ice,}:
+	
+# "Greetings"
+func process_incoming(incoming:P2PIncoming):
+{"Type": "Greetings", "Me": my_id, "Version": my_version}
+{"Type": "Greetings", "Me": var who, "Version": var version}
+func process_outgoing(outgoing:P2POutgoing):
+{"Type": "Greetings", "Me": my_id, "Version": my_version}
+{"Type": "Greetings", "Me": var who, "Version": var version}
+
+
+# "Me"
+func process_incoming(incoming:P2PIncoming):
+{"Type": "Me", "Me": var who}
+{"Type": "Me", "Me": my_id}
+func process_outgoing(outgoing:P2POutgoing):
+{"Type":"Me", "Me": my_id}
+func process_packet(packet:Dictionary):
+{"Source": my_id, "Destination": source, "Type":"Me", "Me": my_id}
+
+# "Who"
+func process_incoming(incoming:P2PIncoming):
+{"Type" : "Who"}
+func process_outgoing(outgoing:P2POutgoing):
+{"Type" : "Who"}
+func process_packet(packet:Dictionary):
+{"Destination": my_id, "Source": var source, "Type" : "Who"}
+
+# "UnknownVersion"
+func process_incoming(incoming:P2PIncoming):
+{"Type":"UnknownVersion"}
+func process_outgoing(outgoing:P2POutgoing):
+{"Type":"UnknownVersion"}
+
+#NotYouAgain"
+func process_incoming(incoming:P2PIncoming):
+{"Type":"NotYouAgain"}
+
+# InvalidPacket"
+func process_incoming(incoming:P2PIncoming):
+{"Type":"InvalidPacket"}
+
+# "InvalidSalutation"
+func process_outgoing(outgoing:P2POutgoing):
+{"Type":"InvalidSalutation"}
+
+# "Goodbye"
+func say_goodbye_to(id: String):
+{"Type":"Goodbye"}
+
+#
+func on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name):
+{"Source": my_id, "Destination": outgoing.destination, "Type": "newICE", "OfferID": offer_id, "ICE": [{"Media" : mid_name, "Index" : index_name, "Name" : sdp_name}]})

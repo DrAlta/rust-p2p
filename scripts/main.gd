@@ -40,7 +40,7 @@ func create_offer():
 
 
 func on_request_offer_copy(id):
-	logy("error", "[main:43]on_request_offer_copy(id)")
+	logy("signal", "[main:43]on_request_offer_copy(id)")
 	var jsoned = network.get_offer_by_id(id).get_json()
 	if jsoned:
 		DisplayServer.clipboard_set(jsoned)
@@ -49,7 +49,7 @@ func on_request_offer_copy(id):
 
 
 func on_request_offer_show(id):
-	logy("error", "[main:52]on_request_offer_show(id)")
+	logy("signal", "[main:52]on_request_offer_show(id)")
 	var jsoned = network.get_offer_by_id(id).get_json()
 	if jsoned:
 		showed_offer = id
@@ -60,12 +60,12 @@ func on_request_offer_show(id):
 
 
 func _on_connection_input_request_offer():
-	logy("trace", "[main:63]_on_connection_input_request_offer()")
+	logy("signal", "[main:63]_on_connection_input_request_offer()")
 	create_offer()
 
 
 func on_incoming_offer_generated(dict_offer):
-	logy("trace", "[main:68] on_offer_generated(offer)")
+	logy("signal", "[main:68] on_offer_generated(offer)")
 	if dict_offer.ID == showed_offer:
 		var jsoned = network.get_offer_json_by_id(dict_offer.ID);
 		if jsoned:
@@ -73,26 +73,32 @@ func on_incoming_offer_generated(dict_offer):
 
 
 func _on_show_open_pressed():
-	logy("trace", "[main:76]_on_show_open_pressed()")
+	logy("signal", "[main:76]_on_show_open_pressed()")
 	$Open.show()
 	pass # Replace with function body.
 
 
 func _on_open_close_pressed():
-	logy("trace", "[main:82]_on_open_close_pressed()")
+	logy("signal", "[main:82]_on_open_close_pressed()")
 	$Open.hide()
 	pass # Replace with function body.
 
 
 func _on_connect_pressed():
-	logy("trace", "[main:88]_on_connect_pressed()")
+	logy("signal", "[main:88]_on_connect_pressed()")
 	$ConnectionInput.show()
 	pass # Replace with function body.
 
 
 func _on_connection(msg):
-	logy("trace", "[main:94]_on_connection()")
+	logy("signal", "[main:94]_on_connection()")
 	network.user_packet(msg)
+
+
+func _on_newtork_user_answer(id):
+	logy("signal", "[main:99]_on_newtork_user_answer(id)")
+	var jsoned = network.get_answer_json_by_id(id)
+	gui_answer_panel.set_answer(jsoned)
 
 
 func logy(lvl: String, msg: String):
