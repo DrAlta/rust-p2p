@@ -1,0 +1,13 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = 4.1
+
+[libraries]
+linux.debug.x86_64 =     "res://rust-logic/rust-logic/target/debug/librust_logic.so"
+linux.release.x86_64 =   "res://rust-logic/rust-logic/target/release/librust_logic.so"
+windows.debug.x86_64 =   "res://rust-logic/rust-logic/target/debug/rust_logic.dll"
+windows.release.x86_64 = "res://rust-logic/rust-logic/target/release/rust_logic.dll"
+macos.debug =            "res://rust-logic/rust-logic/target/debug/librust_logic.dylib"
+macos.release =          "res://rust-logic/rust-logic/target/release/librust_logic.dylib"
+macos.debug.arm64 =      "res://rust-logic/rust-logic/target/debug/librust_logic.dylib"
+macos.release.arm64 =    "res://rust-logic/rust-logic/target/release/librust_logic.dylib"

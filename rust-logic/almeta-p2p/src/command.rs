@@ -1,6 +1,6 @@
-use super::{Answer, ChannelID, ICE, Offer, Packet, packet::DirectPacket};
+use super::{ChannelID, ICE, Packet, packet::DirectPacket};
 #[derive(Debug)]
-pub enum Command {
+pub enum Command<Answer, Offer> {
     AddICE{channel_id: ChannelID, ice: ICE},
     AnswerOffer{channel_id: ChannelID, answer: Answer},
     GenerateAnswer{channel_id: ChannelID, offer: Offer},

@@ -1,27 +1,29 @@
 use std::collections::HashMap;
 
-use super::{ChannelID, Command, ICE, Offer, packet::DirectPacket, Packet, PeerID, Answer};
+use crate::logy;
+
+use super::{ChannelID, Command, ICE, packet::DirectPacket, Packet, PeerID};
 
 #[derive(Debug)]
-struct Outgoing {
+struct Outgoing<Answer> {
     pub user: bool,
     pub answer: Option<Answer>,
     pub ice: Vec<ICE>,
 }
 
-impl Outgoing{
+impl<Answer> Outgoing<Answer>{
     pub fn new(answer: Option<Answer>, ice: Vec<ICE>, user: bool) -> Self {
         Self { answer, ice, user }
     }
 }
 #[derive(Debug)]
-struct Incoming {
+struct Incoming<Offer> {
     pub user: bool,
     pub offer: Option<Offer>,
     pub ice: Vec<ICE>,
 }
 
-impl Incoming{
+impl<Offer> Incoming<Offer>{
     pub fn new(offer: Option<Offer>, ice: Vec<ICE>, user: bool) -> Self {
         Self { offer, ice, user}
     }
@@ -29,8 +31,8 @@ impl Incoming{
 
 
 #[derive(Debug)]
-pub struct Node {
-    pub command_queue: Vec<Command>,
+pub struct Node<Answer, Offer> {
+    pub command_queue: Vec<Command<Answer, Offer>>,
 
     pub my_id: PeerID,
 
@@ -38,12 +40,12 @@ pub struct Node {
     
     channel_id_generator_state: i8,
 
-    incoming: HashMap<ChannelID, Incoming>,
-    outgoing: HashMap<ChannelID, Outgoing>,
+    incoming: HashMap<ChannelID, Incoming<Offer>>,
+    outgoing: HashMap<ChannelID, Outgoing<Answer>>,
 }
 
 /// Creation
-impl Node {
+impl<Answer, Offer> Node<Answer, Offer> {
     pub fn new(my_id: String) -> Self {
         Self {
             command_queue: Vec::new(), 
@@ -55,7 +57,7 @@ impl Node {
     }
 }
 
-impl Node {
+impl<Answer: Clone, Offer: Clone> Node<Answer, Offer> {
     /*
     pub fn generate_offer(&mut self) -> ChannelID {
         self.channel_id_generator_state += 1;
@@ -146,7 +148,7 @@ impl Node {
     }
 }
 
-impl Node {
+impl<Answer, Offer> Node<Answer, Offer> {
     pub fn recieve_offer(&mut self, offer: Offer, user: bool) -> ChannelID {
         self.channel_id_generator_state += 1;
         let channel_id: ChannelID = self.channel_id_generator_state.into();

@@ -1,5 +1,5 @@
 [package]
-name = "rust-logic"
+name = "almeta-p2p"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,6 +10,6 @@ serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
 
 [features]
-default = ["trace", "error"]
+default = ["error"]
 error = []
 trace = []
