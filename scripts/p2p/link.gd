@@ -21,8 +21,8 @@ func _init(id_arg: String):
 
 func close():
 	connection.close()
-	channel.free()
-	connection.free()
+#	channel.free()
+#	connection.free()
 
 
 func create_offer():

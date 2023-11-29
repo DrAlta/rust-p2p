@@ -4,7 +4,10 @@ signal  connection(msg: String)
 @onready var gui_answer_text = $HBoxContainer/VBoxContainer/AnswerHBox/AnswerText
 @onready var gui_offer_text = $HBoxContainer/VBoxContainer/OfferHBoxContainer/OfferText
 
-func set_offer(msg:String):
+var shown_id
+
+func set_offer(id, msg:String):
+	shown_id = id
 	gui_offer_text.text = msg
 	show()
 

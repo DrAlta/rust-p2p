@@ -7,8 +7,11 @@ var id : String
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	$HBoxContainer/CopyButton.connect("pressed", on_copy_button_pressed)
 	pass # Replace with function body.
+
+
+func get_id() -> String:
+	return id
 
 
 func set_id(id_arg: String):

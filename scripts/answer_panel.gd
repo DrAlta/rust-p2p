@@ -1,5 +1,7 @@
 extends PanelContainer
-func set_answer(msg: String):
+var shown_id
+func set_answer(id, msg: String):
+	shown_id = id
 	$HBoxContainer/OutgoingText.text = msg
 	show()
 

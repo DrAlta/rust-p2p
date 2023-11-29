@@ -32,7 +32,7 @@ func _process(delta):
 
 
 func create_offer():
-	logy("trace", "[main:28]create_offer()")
+	logy("trace", "[main:35]create_offer()")
 	var id = network.create_incoming()
 	showed_offer = id
 	var offer =  network.get_incoming_by_id(id)
@@ -42,37 +42,53 @@ func create_offer():
 	offer_scene.connect("request_offer_copy", on_request_offer_copy)
 	offer.connect("offer_generated", on_incoming_offer_generated)
 	offer.create_offer()
-	$Open/HBox/UserOffers.add_child(offer_scene)
-	
+	gui_user_offers.add_child(offer_scene)
 
 
-func on_request_offer_copy(id):
-	logy("signal", "[main:43]on_request_offer_copy(id)")
-	var jsoned = network.get_offer_by_id(id).get_json()
+func on_request_answer_copy(id):
+	logy("signal", "[main:49]on_request_answer_copy(id)")
+	var jsoned = network.get_answer_json_by_id(id)
 	if jsoned:
 		DisplayServer.clipboard_set(jsoned)
 	else:
-		logy("error", "[main:48]failed to get JSON for offer " + str(id))
+		logy("error", "[main:54]failed to get JSON for answer " + str(id))
+
+
+func on_request_answer_show(id):
+	logy("signal", "[main:58]on_request_answer_show(id)")
+	var jsoned = network.get_answer_json_by_id(id)
+	if jsoned:
+		gui_answer_panel.set_answer(id, jsoned)
+	else:
+		logy("error", "[main:63]failed to get JSON for answer " + str(id))
+
+
+func on_request_offer_copy(id):
+	logy("signal", "[main:67]on_request_offer_copy(id)")
+	var jsoned = network.get_offer_json_by_id(id)
+	if jsoned:
+		DisplayServer.clipboard_set(jsoned)
+	else:
+		logy("error", "[main:72]failed to get JSON for offer " + str(id))
 
 
 func on_request_offer_show(id):
-	logy("signal", "[main:52]on_request_offer_show(id)")
-	var jsoned = network.get_offer_by_id(id).get_json()
+	logy("signal", "[main:76]on_request_offer_show(id)")
+	var jsoned = network.get_offer_json_by_id(id)
 	if jsoned:
 		showed_offer = id
 		gui_offer_panel.set_offer(id, jsoned)
 	else:
-		logy("error", "[main:62]failed to get JSON for offer " + str(id))
-
+		logy("error", "[main:82]failed to get JSON for offer " + str(id))
 
 
 func _on_connection_input_request_offer():
-	logy("signal", "[main:67]_on_connection_input_request_offer()")
+	logy("signal", "[main:86]_on_connection_input_request_offer()")
 	create_offer()
 
 
 func on_incoming_offer_generated(dict_offer):
-	logy("signal", "[main:72] on_offer_generated(offer)")
+	logy("signal", "[main:91] on_offer_generated(offer)")
 	if dict_offer.ID == showed_offer:
 		var jsoned = network.get_offer_json_by_id(dict_offer.ID);
 		if jsoned:
@@ -80,36 +96,44 @@ func on_incoming_offer_generated(dict_offer):
 
 
 func _on_show_open_pressed():
-	logy("signal", "[main:80]_on_show_open_pressed()")
+	logy("signal", "[main:99]_on_show_open_pressed()")
 	$Open.show()
 	pass # Replace with function body.
 
 
 func _on_open_close_pressed():
-	logy("signal", "[main:86]_on_open_close_pressed()")
+	logy("signal", "[main:105]_on_open_close_pressed()")
 	$Open.hide()
 	pass # Replace with function body.
 
 
 func _on_connect_pressed():
-	logy("signal", "[main:88]_on_connect_pressed()")
+	logy("signal", "[main:111]_on_connect_pressed()")
 	$ConnectionInput.show()
 	pass # Replace with function body.
 
 
 func _on_connection(msg):
-	logy("signal", "[main:94]_on_connection()")
+	logy("signal", "[main:117]_on_connection()")
 	network.user_packet(msg)
 
 
 func _on_network_user_answer(id):
-	logy("signal", "[main:106]_on_newtork_user_answer(id)")
+	logy("signal", "[main:122]_on_newtork_user_answer(id)")
 	var jsoned = network.get_answer_json_by_id(id)
 	gui_answer_panel.set_answer(id, jsoned)
+##########################333
+	var answer_scene = user_offer_scene.instantiate()
+	answer_scene.set_id(id)
+	answer_scene.connect("request_offer_show", on_request_answer_show)
+	answer_scene.connect("request_offer_copy", on_request_answer_copy)
+	gui_user_answers .add_child(answer_scene)
+
+###############################3
 
 
 func _on_network_user_answer_completed(id):
-	logy("signal", "[main:112]_on_newtork_user_answer_completed(id)")
+	logy("signal", "[main:136]_on_newtork_user_answer_completed(id)")
 	if gui_answer_panel.shown_id == id:
 		gui_answer_panel.hide()
 	for child in gui_user_answers.get_children():
@@ -119,7 +143,7 @@ func _on_network_user_answer_completed(id):
 
 
 func _on_network_user_offer_completed(id):
-	logy("signal", "[main:120]_on_network_user_offer_completed(id)")
+	logy("signal", "[main:146]_on_network_user_offer_completed(id)")
 	if gui_offer_panel.shown_id == id:
 		gui_offer_panel.hide()
 	for child in gui_user_offers.get_children():

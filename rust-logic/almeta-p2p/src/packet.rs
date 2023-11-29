@@ -18,25 +18,27 @@
 //!     }
 //! }:
 use serde::{Deserialize, Serialize};
+use crate::ChannelID;
+
 use super::{OfferID, PeerID, ICE};
 
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Packet {
+pub struct Packet<Answer, Offer> {
     #[serde(rename = "Source")]
     pub source: PeerID, 
     #[serde(rename = "Destination")]
     pub destination: PeerID, 
     #[serde(rename = "Type")]
-    pub r#type: PacketType,
+    pub r#type: PacketType<Answer, Offer>,
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum PacketType {
+pub enum PacketType<Answer, Offer> {
     Answer{
         #[serde(rename = "Answer")]
-        answer: String,
+        answer: Answer,
         #[serde(rename = "OfferID")]
         offer_id: OfferID,
         #[serde(rename = "ICE")]
@@ -44,52 +46,27 @@ pub enum PacketType {
     },
     Offer{
         #[serde(rename = "Offer")]
-        offer: String,
+        offer: Offer,
         #[serde(rename = "OfferID")]
         offer_id: OfferID,
         #[serde(rename = "ICE")]
         ice: Vec<ICE>,
     },
-    Me{
-        #[serde(rename = "Me")]
-        me: PeerID,
-    },
-    Who,
     InvalidPacket,
     Goodbye,
     NewICE{
-        #[serde(rename = "OfferID")]
-        offer_id: OfferID,
+        #[serde(rename = "ChannelID")]
+        channel_id: ChannelID,
         #[serde(rename = "ICE")]
-        ice: Vec<ICE>,
+        ice: ICE,
     }
-}
-#[derive(Serialize, Deserialize, Debug)]
-pub enum DirectPacket {
-    Greetings{
-        #[serde(rename = "Me")]
-        me: PeerID,
-        #[serde(rename = "Version")]
-        version: String,
-    },
-    Me{
-        #[serde(rename = "Me")]
-        me: PeerID,
-    },
-    Who,
-    UnknownVersion,
-    NotYouAgain,
-    InvalidPacket,
-    InvalidSalutation,
-    Goodbye,
 }
 
 pub fn main(){
-    let inner = PacketType::Answer { answer: "spam".into(), offer_id: "eggs".into(), ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
+    let inner = PacketType::<String, String>::Answer { answer: "spam".into(), offer_id: 69, ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
     //let outer = Outer::Answer(inner);
     let packet = Packet{source: "Source".into(), destination: "Destination".into(),r#type: inner};
     println!("\n{}\n", serde_json::to_string(&packet).unwrap());
-    let packet = Packet{source: "Source".into(), destination: "Destination".into(),r#type: PacketType::Who};
     println!("{}\n", serde_json::to_string(&packet).unwrap());
 
 }

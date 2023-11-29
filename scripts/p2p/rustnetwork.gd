@@ -1,43 +1,26 @@
 extends  Node
-class_name P2PNetwork
+class_name RustNetwork
 signal user_answer(id)
 signal user_answer_completed(id)
 signal user_offer_completed(id)
-signal offer_generated(ided_offer: Dictionary)
-var my_version = "Rust:0.0"
+var links := {}
 
-var my_id : String
-
-var open_incoming : = {}
-var open_outgoing : = {}
-
-#{id: link}
-var my_neighbors : = {}
-
+var rust_logic : RustLogic
 
 
 func _init():
-	my_id = str(randi())
-	print("[network:17] generatin id", my_id)
+	rust_logic = RustLogic.new()
 
 
 func _process(_delta):
 	#logy("trace", "[network:43]_process()")
-	for key in open_incoming:
-		var incoming = open_incoming[key]
-		process_incoming(incoming)
-	for key in open_outgoing:
-		var outgoing = open_outgoing[key]
-		process_outgoing(outgoing)
-
+	for link in links:
+		pass
 
 func create_incoming() -> String:
-	var id : = "Incoming" + str(open_incoming.size())
-	var incoming= P2PIncoming.new(id)
-	incoming.connect("offer_generated", on_incoming_offer_generated)
-
-	open_incoming[id] = incoming
-	add_child(incoming)
+	var id = rust_logic.generate_offer()
+	var link := P2PLink.new(id)
+	links[id] = link
 	return id
 
 
@@ -269,10 +252,6 @@ func user_packet(msg):
 	else:
 		logy("error", "Could parse user packet as json")
 
-
-func on_incoming_offer_generated(dict_offer):
-	logy("signal", "[network:274] on_offer_generated(dict_offer)")
-	emit_signal("offer_generated", dict_offer)
 
 func on_outgoing_answer_generated(dict_answer: Dictionary):
 	logy("signal", "[network:268]on_outgoing_answer_generated(dict_answer: Dictionary)")

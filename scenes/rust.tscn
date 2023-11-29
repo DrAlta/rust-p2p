@@ -1,11 +1,10 @@
-[gd_scene load_steps=7 format=3 uid="uid://c0fveh3kfbo35"]
+[gd_scene load_steps=6 format=3 uid="uid://sn4pjvwnhlll"]
 
-[ext_resource type="Script" path="res://scenes/main.gd" id="1_c7hwl"]
-[ext_resource type="PackedScene" uid="uid://cbpp4yno4vqkb" path="res://scenes/user_offer.tscn" id="2_l2hia"]
-[ext_resource type="Script" path="res://scripts/offer_panel.gd" id="2_t0c0x"]
-[ext_resource type="Script" path="res://scripts/connection_input.gd" id="2_yjbxi"]
-[ext_resource type="Script" path="res://scripts/answer_panel.gd" id="4_p5d3a"]
-[ext_resource type="Script" path="res://scripts/p2p/network.gd" id="6_bma75"]
+[ext_resource type="Script" path="res://scenes/main.gd" id="1_dekk1"]
+[ext_resource type="Script" path="res://scripts/connection_input.gd" id="3_ld7gr"]
+[ext_resource type="Script" path="res://scripts/offer_panel.gd" id="4_7ftxr"]
+[ext_resource type="Script" path="res://scripts/answer_panel.gd" id="5_7ekkp"]
+[ext_resource type="Script" path="res://scripts/p2p/rustnetwork.gd" id="5_s1lrd"]
 
 [node name="HBox" type="MarginContainer"]
 anchors_preset = 15
@@ -13,8 +12,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_c7hwl")
-user_offer_scene = ExtResource("2_l2hia")
+script = ExtResource("1_dekk1")
 metadata/_edit_horizontal_guides_ = [-83.0]
 
 [node name="VBox" type="VBoxContainer" parent="."]
@@ -89,7 +87,7 @@ text = "X"
 [node name="ConnectionInput" type="PanelContainer" parent="."]
 visible = false
 layout_mode = 2
-script = ExtResource("2_yjbxi")
+script = ExtResource("3_ld7gr")
 
 [node name="HBox" type="HBoxContainer" parent="ConnectionInput"]
 layout_mode = 2
@@ -126,7 +124,7 @@ text = "X"
 visible = false
 custom_minimum_size = Vector2(200, 50)
 layout_mode = 2
-script = ExtResource("2_t0c0x")
+script = ExtResource("4_7ftxr")
 
 [node name="HBoxContainer" type="HBoxContainer" parent="OfferPanel"]
 layout_mode = 2
@@ -184,7 +182,7 @@ text = "X"
 visible = false
 custom_minimum_size = Vector2(200, 50)
 layout_mode = 2
-script = ExtResource("4_p5d3a")
+script = ExtResource("5_7ekkp")
 
 [node name="HBoxContainer" type="HBoxContainer" parent="AnswerPanel"]
 layout_mode = 2
@@ -211,7 +209,7 @@ theme_override_colors/font_color = Color(1, 0, 0, 1)
 text = "X"
 
 [node name="P2PNetwork" type="Node" parent="."]
-script = ExtResource("6_bma75")
+script = ExtResource("5_s1lrd")
 
 [connection signal="pressed" from="VBox/HBoxContainer/Connect" to="." method="_on_connect_pressed"]
 [connection signal="pressed" from="VBox/HBoxContainer/ShowOpen" to="." method="_on_show_open_pressed"]
@@ -229,6 +227,3 @@ script = ExtResource("6_bma75")
 [connection signal="pressed" from="OfferPanel/HBoxContainer/Close" to="OfferPanel" method="_on_close_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/VBoxContainer/Copy" to="AnswerPanel" method="_on_copy_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/Close" to="AnswerPanel" method="_on_close_pressed"]
-[connection signal="user_answer" from="P2PNetwork" to="." method="_on_network_user_answer"]
-[connection signal="user_answer_completed" from="P2PNetwork" to="." method="_on_network_user_answer_completed"]
-[connection signal="user_offer_completed" from="P2PNetwork" to="." method="_on_network_user_offer_completed"]

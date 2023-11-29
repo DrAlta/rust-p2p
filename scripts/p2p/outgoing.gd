@@ -9,15 +9,17 @@ var offer_id: String
 var destination := ""
 var greeted_ka : = false
 
-func _init(id_arg: String, offer_id_arg: String):
+func _init(id_arg: String, offer_id_arg: String, destination_arg: String):
+	print("[outgoing:13] created for dest:", destination_arg)
 	offer_id = offer_id_arg
+	destination = destination_arg
 	link = P2PLink.new(id_arg)
 	link.connect("answer_generated", on_answer_generated)
 	link.connect("new_ice_candidate", on_new_ice_candidate)
 
 
-func add_ice_candidate(media: String, index: int, name:String):
-	link.add_ice_candidate(media, index, name)
+func add_ice_candidate(media: String, index: int, name_arg:String):
+	link.add_ice_candidate(media, index, name_arg)
 
 
 func close():
@@ -49,9 +51,9 @@ func set_remote_description(type: String, sdp: String):
 
 
 func on_answer_generated(dict_answer):
-	logy("signal", "[outgoming:51]on_answer_generated(dict_answer)")
-	await get_tree().create_timer(1).timeout
+	logy("signal", "[outgoming:52]on_answer_generated(dict_answer)")
 	answer = dict_answer.Answer
+	await get_tree().create_timer(1).timeout
 	emit_signal("answer_generated", {"ID" : dict_answer.ID, "OfferID": offer_id, "Answer" : dict_answer.Answer, "ICE" : link.ice})
 
 

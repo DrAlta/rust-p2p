@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::logy;
+use crate::{logy, OfferID, packet::PacketType, UserJSON};
 
-use super::{ChannelID, Command, ICE, packet::DirectPacket, Packet, PeerID};
+use super::{ChannelID, Command, ICE, DirectPacket, Packet, PeerID};
 
 #[derive(Debug)]
 struct Outgoing<Answer> {
@@ -57,7 +57,7 @@ impl<Answer, Offer> Node<Answer, Offer> {
     }
 }
 
-impl<Answer: Clone, Offer: Clone> Node<Answer, Offer> {
+impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Answer, Offer> {
     /*
     pub fn generate_offer(&mut self) -> ChannelID {
         self.channel_id_generator_state += 1;
@@ -71,6 +71,34 @@ impl<Answer: Clone, Offer: Clone> Node<Answer, Offer> {
         self.outgoing.remove(channel_id);
   
         self.send_direct(channel_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), version: "Rust:0.0".into() })
+    }
+    pub fn get_answer_json_by_id(&self, offer_id: OfferID) -> Option<String> {
+        let outgoing = self.outgoing.get(&offer_id)?;
+        let answer = outgoing.answer.clone()?;
+        let inner = PacketType::<Answer, Offer>::Answer { 
+            answer: answer, 
+            offer_id, 
+            ice: outgoing.ice.clone()
+        };
+        let user = UserJSON{
+            destination: self.my_id.clone(),
+            r#type: inner
+        };
+        serde_json::to_string(&user).ok()
+    }
+    pub fn get_offer_json_by_id(&self, offer_id: OfferID) -> Option<String> {
+        let incoming = self.incoming.get(&offer_id)?;
+        let offer = incoming.offer.clone()?;
+        let inner = PacketType::<Answer, Offer>::Offer { 
+            offer: offer, 
+            offer_id, 
+            ice: incoming.ice.clone()
+        };
+        let user = UserJSON{
+            destination: self.my_id.clone(),
+            r#type: inner
+        };
+        serde_json::to_string(&user).ok()
     }
     pub fn generate_offer(&mut self, user: bool) -> ChannelID {
         self.channel_id_generator_state += 1;
@@ -130,8 +158,31 @@ impl<Answer: Clone, Offer: Clone> Node<Answer, Offer> {
             DirectPacket::Goodbye => todo!(),
         };
     }
-    pub fn recieve_packet(&self, channel_id: &ChannelID, packet: Packet) {
-        todo!("{channel_id:?}, {packet:?}")
+    pub fn recieve_packet(&mut self, _channel_id: &ChannelID, packet: Packet<Answer, Offer>) {
+        if packet.destination == self.my_id {
+            match packet.r#type {
+                crate::packet::PacketType::Answer { .. } => todo!(),
+                crate::packet::PacketType::Offer { .. } => todo!(),
+                crate::packet::PacketType::InvalidPacket => todo!(),
+                crate::packet::PacketType::Goodbye => todo!(),
+                crate::packet::PacketType::NewICE { channel_id, ice } => {
+                    let Some(incoming) = self.incoming.get_mut(&channel_id) else {
+                        logy!("error", "couldn't find an incoming for {}", channel_id);
+                        return
+                    };
+                    incoming.ice.push(ice.clone());
+                    self.command_queue.push(Command::AddICE { channel_id, ice});
+                    /*
+                    for ice in ice {
+                        self.command_queue.push(Command::AddICE { channel_id: channel_id.clone(), ice});
+                    }
+                    */
+
+                },
+            }
+        } else {
+            self.send_packet(packet);
+        }
     }
     pub fn select_channel(&self, peer_id: &PeerID) -> Option<ChannelID> {
         self.neighbors.get(peer_id).cloned()
@@ -139,7 +190,7 @@ impl<Answer: Clone, Offer: Clone> Node<Answer, Offer> {
     pub fn send_direct(&mut self, channel_id: ChannelID, packet: DirectPacket) {
         self.command_queue.push(Command::SendDirect { channel_id, packet });
     }
-    pub fn send_packet(&mut self, packet: Packet) {
+    pub fn send_packet(&mut self, packet: Packet<Answer, Offer>) {
         let Some(channel_id) = self.select_channel(&packet.destination) else {
             logy!("error", "Couldn't find next node to {}", packet.destination);
             return
