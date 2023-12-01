@@ -86,13 +86,12 @@ func process_link(link:P2PLink):
 	var id = link.id
 	link.poll()
 	if link.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
-		logy("debug", "[rustnetwork:89] link:" + str(id) + " ready")
 		if not established.has(id):
-			logy("trace", "[rustnetwork:89] connection " + str(id) + " established")
+			logy("trace", "[rustnetwork:90] connection " + str(id) + " established")
 			established[id] = true
 			rust_logic.channel_established(id)
 		if link.get_available_packet_count() > 0:
-			rust_logic.receive(id, link.get_packet())
+			rust_logic.receive_packet(id, link.get_packet())
 
 
 func send(channel_id, packet: String):
@@ -104,7 +103,7 @@ func send(channel_id, packet: String):
 
 func user_packet(packet: String):
 	print("UP:", packet)
-	rust_logic.receive(0, packet)
+	rust_logic.receive_packet(0, packet)
 
 
 func on_answer_generated(dict_answer):

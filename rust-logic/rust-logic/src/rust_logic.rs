@@ -34,6 +34,10 @@ impl IRefCounted for RustLogic {
 #[godot_api]
 impl RustLogic {
     #[func]
+    fn channel_established(&mut self, channel_id: ChannelID) {
+        self.node.channel_established(&channel_id)
+    }
+    #[func]
     fn generate_offer(&mut self) -> ChannelID {
         self.node.generate_offer(true)
     }
@@ -134,7 +138,7 @@ impl RustLogic {
 
 
     #[func]
-    fn receive(&mut self, channel_id: ChannelID, json_packet: String) -> String {
+    fn receive_packet(&mut self, channel_id: ChannelID, json_packet: String) {
         if let Ok(packet) = serde_json::from_str::<Packet::<Answer, Offer>>(&json_packet) {
             self.node.receive_packet(&channel_id, packet)
         } else if let Ok(packet) = serde_json::from_str::<DirectPacket>(&json_packet) {
@@ -147,6 +151,5 @@ impl RustLogic {
                 }
             )
         };
-        "".into()
     }
 }

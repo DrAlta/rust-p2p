@@ -124,12 +124,15 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     self.send_direct(channel_id.clone(), DirectPacket::NotYouAgain)
                 } else {
                     self.neighbors.insert(me, channel_id.clone());
-                }55
+                }
             },
             DirectPacket::Me { .. } => todo!(),
             DirectPacket::Who => todo!(),
             DirectPacket::UnknownVersion => todo!(),
-            DirectPacket::NotYouAgain => todo!(),
+            DirectPacket::NotYouAgain => {
+                // ToDo
+                ()
+            },
             DirectPacket::InvalidPacket => todo!(),
             DirectPacket::InvalidSalutation => todo!(),
             DirectPacket::Goodbye => todo!(),
@@ -139,16 +142,15 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         if packet.destination == self.my_id {
             match packet.r#type {
                 crate::packet::PacketType::Answer { answer, offer_id, ice} => {
+                    self.command_queue.push_back(Command::AnswerOffer { channel_id: offer_id, answer });
                     for icee in ice {
-                        self.add_ice(&offer_id, icee)
+                        self.command_queue.push_back(Command::AddICE { channel_id: offer_id.clone(), ice: icee});
                     };
-                    self.command_queue.push_back(Command::AnswerOffer { channel_id: offer_id, answer })
-
                 },
                 crate::packet::PacketType::Offer {offer, offer_id, ice} => {
                     let id = self.receive_offer(offer, offer_id, packet.source == "User");
                     for icee in ice {
-                        self.add_ice(&id, icee)
+                        self.command_queue.push_back(Command::AddICE { channel_id: id.clone(), ice: icee});
                     };
                 },
                 crate::packet::PacketType::InvalidPacket => {
@@ -161,7 +163,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                         return
                     };
                     incoming.ice.push(ice.clone());
-                    self.command_queue.push_back(Command::AddICE { channel_id, ice});
+                    //self.command_queue.push_back(Command::AddICE { channel_id, ice});
                     /*
                     for ice in ice {
                         self.command_queue.push_back(Command::AddICE { channel_id: channel_id.clone(), ice});
@@ -188,7 +190,6 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.command_queue.push_back(Command::Send { channel_id, packet });
     }
     pub fn add_ice(&mut self, channel_id: &ChannelID, ice: ICE) {
-        self.command_queue.push_back(Command::AddICE { channel_id: channel_id.clone(), ice: ice.clone()});
         if let Some(incoming) = self.incoming.get_mut(channel_id) {
             incoming.ice.push(ice);
         } else if let Some(outgoing) = self.outgoing.get_mut(channel_id) {
