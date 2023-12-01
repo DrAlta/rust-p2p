@@ -9,5 +9,6 @@ edition = "2021"
 crate-type = ["cdylib"]  # Compile this crate to a dynamic C library.
 
 [dependencies]
+serde_json = "1.0.108"
 godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
 almeta-p2p = { path = "../almeta-p2p" }

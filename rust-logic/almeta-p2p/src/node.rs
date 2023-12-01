@@ -1,38 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use crate::{logy, OfferID, packet::PacketType};
 
-use crate::{logy, OfferID, packet::PacketType, UserJSON};
+use super::{ChannelID, Command, ICE, DirectPacket, Packet, PeerID, Incoming, Outgoing};
 
-use super::{ChannelID, Command, ICE, DirectPacket, Packet, PeerID};
-
-#[derive(Debug)]
-struct Outgoing<Answer> {
-    pub user: bool,
-    pub answer: Option<Answer>,
-    pub ice: Vec<ICE>,
-}
-
-impl<Answer> Outgoing<Answer>{
-    pub fn new(answer: Option<Answer>, ice: Vec<ICE>, user: bool) -> Self {
-        Self { answer, ice, user }
-    }
-}
-#[derive(Debug)]
-struct Incoming<Offer> {
-    pub user: bool,
-    pub offer: Option<Offer>,
-    pub ice: Vec<ICE>,
-}
-
-impl<Offer> Incoming<Offer>{
-    pub fn new(offer: Option<Offer>, ice: Vec<ICE>, user: bool) -> Self {
-        Self { offer, ice, user}
-    }
-}
 
 
 #[derive(Debug)]
 pub struct Node<Answer, Offer> {
-    pub command_queue: Vec<Command<Answer, Offer>>,
+    pub command_queue: VecDeque<Command<Answer, Offer>>,
 
     pub my_id: PeerID,
 
@@ -48,8 +23,8 @@ pub struct Node<Answer, Offer> {
 impl<Answer, Offer> Node<Answer, Offer> {
     pub fn new(my_id: String) -> Self {
         Self {
-            command_queue: Vec::new(), 
-            my_id, neighbors: HashMap::new(), 
+            command_queue: VecDeque::new(), 
+            my_id, neighbors: HashMap::from([("User".into(), 0)]), 
             channel_id_generator_state: 0, 
             incoming: HashMap::new(),
             outgoing: HashMap::new(),
@@ -72,29 +47,31 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
   
         self.send_direct(channel_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), version: "Rust:0.0".into() })
     }
-    pub fn get_answer_json_by_id(&self, offer_id: OfferID) -> Option<String> {
-        let outgoing = self.outgoing.get(&offer_id)?;
+    pub fn get_answer_json_by_id(&self, channel_id: &ChannelID) -> Option<String> {
+        let outgoing = self.outgoing.get(channel_id)?;
         let answer = outgoing.answer.clone()?;
         let inner = PacketType::<Answer, Offer>::Answer { 
             answer: answer, 
-            offer_id, 
+            offer_id: outgoing.offer_id.clone(), 
             ice: outgoing.ice.clone()
         };
-        let user = UserJSON{
+        let user = Packet{
+            source: "User".into(),
             destination: self.my_id.clone(),
             r#type: inner
         };
         serde_json::to_string(&user).ok()
     }
-    pub fn get_offer_json_by_id(&self, offer_id: OfferID) -> Option<String> {
-        let incoming = self.incoming.get(&offer_id)?;
+    pub fn get_offer_json_by_id(&self, channel_id: &ChannelID) -> Option<String> {
+        let incoming = self.incoming.get(channel_id)?;
         let offer = incoming.offer.clone()?;
         let inner = PacketType::<Answer, Offer>::Offer { 
             offer: offer, 
-            offer_id, 
+            offer_id: channel_id.clone(),
             ice: incoming.ice.clone()
         };
-        let user = UserJSON{
+        let user = Packet{
+            source: "User".into(),
             destination: self.my_id.clone(),
             r#type: inner
         };
@@ -104,7 +81,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.channel_id_generator_state += 1;
         let channel_id: ChannelID = self.channel_id_generator_state.into();
         self.incoming.insert(channel_id.clone(), Incoming::new(None, Vec::new(), user));
-        self.command_queue.push(Command::GenerateOffer(channel_id.clone()));
+        self.command_queue.push_back(Command::GenerateOffer(channel_id.clone()));
         channel_id
     }
     /*
@@ -114,29 +91,29 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.command_queue.borrow_mut().push(Command::GenerateOffer);
     }
     */
+    pub fn on_answer_generated(&mut self, channel_id: &ChannelID, answer: Answer) {
+        logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, channel_id);
+        let Some(outgoing) = self.outgoing.get_mut(channel_id) else {
+            logy!("trace", "coundn't find outgoing {channel_id}");
+            return
+        };
+        if outgoing.user {
+            self.command_queue.push_back(Command::UserAnswer { channel_id: channel_id.clone(), answer: answer.clone() });
+        }
+        outgoing.answer = Some(answer);
+    }
     pub fn on_offer_generated(&mut self, channel_id: &ChannelID, offer: Offer) {
         let Some(incoming) = self.incoming.get_mut(channel_id) else {
             logy!("tracenode", "incoming {channel_id:?} not found");
             return
         };
         if incoming.user {
-            logy!("tracenode", " recieved offer for user on channel {channel_id:?}");
-            self.command_queue.push(Command::UserOffer { channel_id: channel_id.clone(), offer: offer.clone() });
+            logy!("tracenode", " received offer for user on channel {channel_id:?}");
+            self.command_queue.push_back(Command::UserOffer { channel_id: channel_id.clone(), offer: offer.clone() });
         }
         incoming.offer = Some(offer)
     }
-    pub fn on_generated_answer(&mut self, channel_id: ChannelID, answer: Answer) {
-        logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, channel_id);
-        let Some(outgoing) = self.outgoing.get_mut(&channel_id) else {
-            logy!("trace", "coundn't find outgoing {channel_id}");
-            return
-        };
-        if outgoing.user {
-            self.command_queue.push(Command::UserAnswer { channel_id: channel_id.clone(), answer: answer.clone() });
-        }
-        outgoing.answer = Some(answer);
-    }
-    pub fn recieve_direct(&mut self, channel_id: &ChannelID, packet: DirectPacket) {
+    pub fn receive_direct(&mut self, channel_id: &ChannelID, packet: DirectPacket) {
         match packet {
             DirectPacket::Greetings { me, version } => {
                 if version != "Rust:0.0" {
@@ -158,12 +135,25 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             DirectPacket::Goodbye => todo!(),
         };
     }
-    pub fn recieve_packet(&mut self, _channel_id: &ChannelID, packet: Packet<Answer, Offer>) {
+    pub fn receive_packet(&mut self, _channel_id: &ChannelID, packet: Packet<Answer, Offer>) {
         if packet.destination == self.my_id {
             match packet.r#type {
-                crate::packet::PacketType::Answer { .. } => todo!(),
-                crate::packet::PacketType::Offer { .. } => todo!(),
-                crate::packet::PacketType::InvalidPacket => todo!(),
+                crate::packet::PacketType::Answer { answer, offer_id, ice} => {
+                    for icee in ice {
+                        self.add_ice(&offer_id, icee)
+                    };
+                    self.command_queue.push_back(Command::AnswerOffer { channel_id: offer_id, answer })
+
+                },
+                crate::packet::PacketType::Offer {offer, offer_id, ice} => {
+                    let id = self.receive_offer(offer, offer_id, packet.source == "User");
+                    for icee in ice {
+                        self.add_ice(&id, icee)
+                    };
+                },
+                crate::packet::PacketType::InvalidPacket => {
+                    logy!("error", "Got a reply that I sent a invalid packet");
+                },
                 crate::packet::PacketType::Goodbye => todo!(),
                 crate::packet::PacketType::NewICE { channel_id, ice } => {
                     let Some(incoming) = self.incoming.get_mut(&channel_id) else {
@@ -171,10 +161,10 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                         return
                     };
                     incoming.ice.push(ice.clone());
-                    self.command_queue.push(Command::AddICE { channel_id, ice});
+                    self.command_queue.push_back(Command::AddICE { channel_id, ice});
                     /*
                     for ice in ice {
-                        self.command_queue.push(Command::AddICE { channel_id: channel_id.clone(), ice});
+                        self.command_queue.push_back(Command::AddICE { channel_id: channel_id.clone(), ice});
                     }
                     */
 
@@ -188,28 +178,36 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.neighbors.get(peer_id).cloned()
     }
     pub fn send_direct(&mut self, channel_id: ChannelID, packet: DirectPacket) {
-        self.command_queue.push(Command::SendDirect { channel_id, packet });
+        self.command_queue.push_back(Command::SendDirect { channel_id, packet });
     }
     pub fn send_packet(&mut self, packet: Packet<Answer, Offer>) {
         let Some(channel_id) = self.select_channel(&packet.destination) else {
             logy!("error", "Couldn't find next node to {}", packet.destination);
             return
         };
-        self.command_queue.push(Command::Send { channel_id, packet });
+        self.command_queue.push_back(Command::Send { channel_id, packet });
+    }
+    pub fn add_ice(&mut self, channel_id: &ChannelID, ice: ICE) {
+        self.command_queue.push_back(Command::AddICE { channel_id: channel_id.clone(), ice: ice.clone()});
+        if let Some(incoming) = self.incoming.get_mut(channel_id) {
+            incoming.ice.push(ice);
+        } else if let Some(outgoing) = self.outgoing.get_mut(channel_id) {
+            outgoing.ice.push(ice);
+        }
     }
 }
 
 impl<Answer, Offer> Node<Answer, Offer> {
-    pub fn recieve_offer(&mut self, offer: Offer, user: bool) -> ChannelID {
+    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> ChannelID {
         self.channel_id_generator_state += 1;
         let channel_id: ChannelID = self.channel_id_generator_state.into();
-        self.outgoing.insert(channel_id, Outgoing::new(None, Vec::new(), user));
-        self.command_queue.push(Command::GenerateAnswer{channel_id: channel_id.clone(), offer});
+        self.outgoing.insert(channel_id, Outgoing::new(offer_id, None, Vec::new(), user));
+        self.command_queue.push_back(Command::GenerateAnswer{channel_id: channel_id.clone(), offer});
         channel_id
     }
-   pub fn recieve_answer(&mut self, channel_id: ChannelID, answer: Answer) {
-    logy!("trace", "{:?} recieved answer", self.my_id);
-    self.command_queue.push(Command::AnswerOffer { channel_id, answer });
+   pub fn receive_answer(&mut self, channel_id: ChannelID, answer: Answer) {
+    logy!("trace", "{:?} received answer", self.my_id);
+    self.command_queue.push_back(Command::AnswerOffer { channel_id, answer });
 
     }
 }

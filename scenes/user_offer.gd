@@ -2,7 +2,7 @@ extends PanelContainer
 signal request_offer_copy(id)
 signal request_offer_show(id)
 
-var id : String
+var id
 
 
 # Called when the node enters the scene tree for the first time.
@@ -10,13 +10,13 @@ func _ready():
 	pass # Replace with function body.
 
 
-func get_id() -> String:
+func get_id():
 	return id
 
 
-func set_id(id_arg: String):
+func set_id(id_arg):
 	id = id_arg
-	$HBoxContainer/Label.text = id_arg
+	$HBoxContainer/Label.text = str(id_arg)
 
 func on_copy_button_pressed():
 	logy("trace", "[user_offer:19]on_copy_button_pressed()")

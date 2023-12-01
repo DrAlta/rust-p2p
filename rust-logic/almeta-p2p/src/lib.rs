@@ -1,5 +1,6 @@
 
-
+mod aux;
+use aux::{Incoming, Outgoing};
 mod command;
 pub use command::Command;
 pub mod direct_packet;

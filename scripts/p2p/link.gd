@@ -7,10 +7,10 @@ signal answer_generated(dict_answer)
 
 var connection : WebRTCPeerConnection
 var channel : WebRTCDataChannel
-var id : String = ""
+var id 
 var ice = []
 
-func _init(id_arg: String):
+func _init(id_arg):
 	logy("trace", "[link:14]_init()")
 	id = id_arg
 	connection = WebRTCPeerConnection.new()
@@ -34,7 +34,7 @@ func get_available_packet_count() -> int:
 	return channel.get_available_packet_count()
 
 
-func get_ch_ready_state():
+func get_ready_state():
 	return channel.get_ready_state()
 
 
@@ -43,6 +43,7 @@ func get_packet() -> String:
 
 
 func give_answer(answer: String):
+	logy("debug", "[link:46]" + str(id) + " give_answer(answer)")
 	connection.set_remote_description("answer", answer)
 
 
@@ -59,6 +60,7 @@ func send(msg:String) -> bool:
 
 
 func add_ice_candidate(a,b,c):
+	logy("debug", "[link:63] adding ice to link:" + str(id))
 	connection.add_ice_candidate(a,b,c)
 
 

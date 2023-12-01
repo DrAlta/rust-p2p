@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, cell::RefCell};
+use std::{collections::{HashMap, VecDeque}, cell::RefCell};
 
-use almeta_p2p::{Command, Packet, Node, DirectPacket, ChannelID};
+use almeta_p2p::{Command, Packet, Node, DirectPacket, ChannelID, OfferID};
 
 
 pub type Offer = String;
@@ -44,7 +44,7 @@ pub fn main() {
     let mut incoming_connections = HashMap::<String, Link>::new();
 
     let _peer_a_user_offer_channel_id = peers[0].borrow_mut().generate_offer(true);
-    let mut user_offers_to_be_routed = Vec::<(usize, Offer)>::new();
+    let mut user_offers_to_be_routed = Vec::<(usize, Offer, OfferID)>::new();
 
     let mut answered_queue =  Vec::<Answer>::new();
 
@@ -58,7 +58,7 @@ pub fn main() {
 
             // logy!("trace", "processing {} commands of peer:{} at {}", peer.command_queue.len(), peer.my_id, peer_idx);
 
-            let mut command_queue = Vec::new();
+            let mut command_queue = VecDeque::new();
             std::mem::swap(&mut peer.command_queue, &mut command_queue);
 
             message_queue = command_queue.into_iter()
@@ -82,7 +82,7 @@ pub fn main() {
                                 logy!("trace", "failed to find {offer:?}");
                                 return x;
                             };
-                            peer.on_generated_answer(channel_id, Link::new(peer_idx, channel_id));
+                            peer.on_answer_generated(&channel_id, Link::new(peer_idx, channel_id));
                             peers_channel_to_link[incoming_link.peer_idx].insert(incoming_link.channel_id, Link::new(peer_idx, channel_id));
                             peers_channel_to_link[peer_idx].insert(channel_id, incoming_link);
                         },
@@ -106,13 +106,13 @@ pub fn main() {
                         )),
                         Command::UserAnswer { channel_id, answer } => {
                             let prev_peer_idx = (NUMBER_OF_PEERS + peer_idx - 1) % NUMBER_OF_PEERS;
-                            peers[prev_peer_idx].borrow_mut().recieve_answer(channel_id, answer);
+                            peers[prev_peer_idx].borrow_mut().receive_answer(channel_id, answer);
 
 
                         },
-                        Command::UserOffer { offer, .. } => {
+                        Command::UserOffer { offer, channel_id } => {
                             let next_peer_idx = (peer_idx + 1) % NUMBER_OF_PEERS;
-                            user_offers_to_be_routed.push((next_peer_idx, offer));
+                            user_offers_to_be_routed.push((next_peer_idx, offer, channel_id));
                             
                         },
                     };
@@ -125,16 +125,16 @@ pub fn main() {
             peers[peer_idx].borrow_mut().channel_established(&channel_id);
         }
         answered_queue = Vec::new();
-        for (peer_idx, offer) in user_offers_to_be_routed {
+        for (peer_idx, offer, offer_id) in user_offers_to_be_routed {
             let mut peer = peers[peer_idx].borrow_mut();
-            peer.recieve_offer(offer, true);
+            peer.receive_offer(offer, offer_id, true);
         }
         user_offers_to_be_routed = Vec::new();
         for (Link{peer_idx, channel_id}, message) in message_queue {
             logy!("trace", "rounting message [{:?}]", message);
             match message {
-                Message::Packet(packet) => peers[peer_idx].borrow_mut().recieve_packet(&channel_id, packet),
-                Message::DirectPacket(packet_type) => peers[peer_idx].borrow_mut().recieve_direct(&channel_id, packet_type),
+                Message::Packet(packet) => peers[peer_idx].borrow_mut().receive_packet(&channel_id, packet),
+                Message::DirectPacket(packet_type) => peers[peer_idx].borrow_mut().receive_direct(&channel_id, packet_type),
             }
         }
     }

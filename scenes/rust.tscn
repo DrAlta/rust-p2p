@@ -1,6 +1,7 @@
-[gd_scene load_steps=6 format=3 uid="uid://sn4pjvwnhlll"]
+[gd_scene load_steps=7 format=3 uid="uid://sn4pjvwnhlll"]
 
 [ext_resource type="Script" path="res://scenes/main.gd" id="1_dekk1"]
+[ext_resource type="PackedScene" uid="uid://cbpp4yno4vqkb" path="res://scenes/user_offer.tscn" id="2_jdoxv"]
 [ext_resource type="Script" path="res://scripts/connection_input.gd" id="3_ld7gr"]
 [ext_resource type="Script" path="res://scripts/offer_panel.gd" id="4_7ftxr"]
 [ext_resource type="Script" path="res://scripts/answer_panel.gd" id="5_7ekkp"]
@@ -13,6 +14,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_dekk1")
+user_offer_scene = ExtResource("2_jdoxv")
 metadata/_edit_horizontal_guides_ = [-83.0]
 
 [node name="VBox" type="VBoxContainer" parent="."]
@@ -21,6 +23,7 @@ layout_mode = 2
 [node name="Log" type="TextEdit" parent="VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+text = "Rust Implementation"
 editable = false
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBox"]
@@ -227,3 +230,7 @@ script = ExtResource("5_s1lrd")
 [connection signal="pressed" from="OfferPanel/HBoxContainer/Close" to="OfferPanel" method="_on_close_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/VBoxContainer/Copy" to="AnswerPanel" method="_on_copy_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/Close" to="AnswerPanel" method="_on_close_pressed"]
+[connection signal="offer_generated" from="P2PNetwork" to="." method="on_network_offer_generated"]
+[connection signal="user_answer" from="P2PNetwork" to="." method="_on_network_user_answer"]
+[connection signal="user_answer_completed" from="P2PNetwork" to="." method="_on_network_user_answer_completed"]
+[connection signal="user_offer_completed" from="P2PNetwork" to="." method="_on_network_user_offer_completed"]

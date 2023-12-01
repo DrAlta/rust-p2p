@@ -3,7 +3,9 @@ class_name RustNetwork
 signal user_answer(id)
 signal user_answer_completed(id)
 signal user_offer_completed(id)
+signal offer_generated(ided_offer: Dictionary)
 var links := {}
+var established := {}
 
 var rust_logic : RustLogic
 
@@ -15,286 +17,109 @@ func _init():
 func _process(_delta):
 	#logy("trace", "[network:43]_process()")
 	for link in links:
-		pass
+		process_link(links[link])
+	var processing_commands : = true
+	while processing_commands:
+		var x = rust_logic.poll();
+		if x.Command != "Null":
+			print("    ", x.Command)
+		match x:
+			{"Command": "Null"}:
+				processing_commands = false
+			{"Command": "AddICE", "ChannelID": var channel_id, "Index": var index, "Media": var media, "Name": var name_arg}:
+				links[channel_id].add_ice_candidate(media, index, name_arg)
+			{"Command": "AnswerOffer", "ChannelID": var channel_id, "Answer": var answer}:
+				logy("debug", "[rustnetwork:32] got AnswerOffer for channel " + str(channel_id))
+				links[channel_id].give_answer(answer)
+			{"Command": "GenerateAnswer", "ChannelID": var channel_id, "Offer": var offer}:
+				create_outgoing(channel_id, offer)
+			{"Command": "GenerateOffer", "ChannelID": var channel_id}:
+				links[channel_id].create_offer()
+			{"Command": "Send", "ChannelID": var channel_id, "Packet": var packet}:
+				send(channel_id, packet)
+			{"Command": "SendDirect", "ChannelID": var channel_id, "Packet": var packet}:
+				send(channel_id, packet)
+			{"Command": "UserAnswer", "ChannelID": var channel_id, "Answer": var _answer}:
+				emit_signal("user_answer", channel_id)
+			{"Command": "UserOffer", "ChannelID": var channel_id, "Offer": var _offer}:
+				print("[rustnetwork:41] emiting UserOffer signal")
+				emit_signal("offer_generated", channel_id)
+			_:
+				print("unhandled packet", JSON.stringify(x))
 
-func create_incoming() -> String:
+func create_incoming():
 	var id = rust_logic.generate_offer()
 	var link := P2PLink.new(id)
 	links[id] = link
+	link.connect("offer_generated", on_offer_generated)
+	link.connect("new_ice_candidate", on_new_ice_candidate)
+
 	return id
 
 
-func create_outgoing(offer_id: String, destination: String) -> String:
-	var id : = "Outgoing" + str(open_outgoing.size())
-	var outgoing= P2POutgoing.new(id, offer_id, destination)
-	open_outgoing[id] = outgoing
-	add_child(outgoing)
+func create_outgoing(id, offer):
+	var link := P2PLink.new(id)
+	links[id] = link
+	link.connect("answer_generated", on_answer_generated)
+	link.connect("new_ice_candidate", on_new_ice_candidate)
+	link.set_remote_description("offer", offer)
+
 	return id
 
 
-func get_answer_json_by_id(id: String):
-	if open_outgoing.has(id):
-		var outgoing = open_outgoing[id]
-		if outgoing.answer != "":
-			return JSON.stringify({"Source": my_id, "Destination": outgoing.destination, "Type": {"Answer": {"Answer": outgoing.answer, "OfferID": outgoing.offer_id, "ICE" : outgoing.link.ice}}})
-		else:
-			logy("error", "[network:33]asked for JSONfied of offer"+  str(id) + " but doesn't have a webRTC offer yet")
+func get_answer_json_by_id(id):
+	var json = rust_logic.get_answer_json_by_id(id)
+	if json == "":
 		return null
 	else:
-		logy("error", "[network:68]asked for JSONfied of offer"+  str(id) + " but it doesn't exist")
-	return null
+		return json
 
 
-func get_incoming_by_id(id: String) -> P2PIncoming:
-	if open_incoming.has(id):
-		return open_incoming[id]
-	else:
-		print("tried to get P2PIncoming ", id, " which doesn't exist")
-		return null
-
-
-func get_outgoing_by_id(id: String) -> P2POutgoing:
-	if open_outgoing.has(id):
-		return open_outgoing[id]
-	else:
-		print("tried to get P2POutgoing ", id, " which doesn't exist")
-		return null
-
-
-func get_offer_json_by_id(id: String):
-	if open_incoming.has(id):
-		var incoming = open_incoming[id]
-		if incoming.offer != "":
-			return JSON.stringify({"Destination": "", "Source": my_id,  "Type": {"Offer": { "Offer" : incoming.offer, "OfferID" : incoming.link.id, "ICE" : incoming.link.ice}}})
-		else:
-			logy("error", "[network:33]asked for JSONfied of offer"+  str(id) + " but doesn't have a webRTC offer yet")
+func get_offer_json_by_id(id):
+	var json = rust_logic.get_offer_json_by_id(id)
+	if json == "":
 		return null
 	else:
-		logy("error", "[network:68]asked for JSONfied of offer"+  str(id) + " but it doesn't exist")
-	return null
+		return json
+
+func process_link(link:P2PLink):
+	var id = link.id
+	link.poll()
+	if link.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
+		logy("debug", "[rustnetwork:89] link:" + str(id) + " ready")
+		if not established.has(id):
+			logy("trace", "[rustnetwork:89] connection " + str(id) + " established")
+			established[id] = true
+			rust_logic.channel_established(id)
+		if link.get_available_packet_count() > 0:
+			rust_logic.receive(id, link.get_packet())
 
 
-func process_incoming(incoming:P2PIncoming):
-	incoming.poll()
-	if incoming.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
-		if not incoming.greeted_ka:
-			incoming.greeted_ka = true
-			incoming.send(JSON.stringify({"Type": "Greetings", "Me": my_id, "Version": my_version}))
-		if incoming.get_available_packet_count() > 0:
-			var raw_packet = incoming.get_packet()
-			var packet = JSON.parse_string(raw_packet)
-			if packet:
-				match packet:
-					{"Type": "Greetings", "Me": var who, "Version": var version}:
-						if version != my_version:
-							incoming.send(JSON.stringify({"Type":"UnknownVersion"}))
-						else:
-							var new_id = str(who)
-							if new_id in my_neighbors:
-								logy("bootstrap", "incoming " + str(incoming.link.id) + " introduced itself as " + str(who) + " again...")
-								incoming.send(JSON.stringify({"Type":"NotYouAgain"}))
-								remove_incoming(incoming.link.id)
-							else:
-								logy("bootstrap", "incoming " + str(incoming.link.id) + " introduced itself as " + str(who))
-								open_incoming.erase(incoming.link.id)
-								incoming.link.id = new_id
-								my_neighbors[str(new_id)] = incoming.link
-								incoming.free()
-					{"Type": "Me", "Me": var who}:
-						var new_id = str(who)
-						if new_id in my_neighbors:
-							logy("bootstrap", "incoming " + str(incoming.link.id) + " identified itself as " + str(who) + " again...")
-							incoming.send(JSON.stringify({"Type":"Not you again!"}))
-							remove_incoming(incoming.link.id)
-						else:
-							logy("bootstrap", "incoming " + str(incoming.link.id) + " identified itself as " + str(who))
-							open_incoming.erase(incoming.link.id)
-							incoming.link.id = new_id
-							my_neighbors[str(new_id)] = incoming.link
-							incoming.free()
-					{"Type" : "Who"}:
-						incoming.send(JSON.stringify({"Type": "Me", "Me": my_id}))
-					_ :
-						logy("bootstrap_error", str(incoming.link.id) + " sent unhandleed message:" + raw_packet)
-						remove_incoming(incoming.link.id)
-			else:
-				logy("bootstrap_error", str(incoming.link.id) + " sent invaled message:" + raw_packet)
-				incoming.send(JSON.stringify({"Type":"InvalidPacket"}))
-				remove_incoming(incoming.link.id)
-
-
-func process_outgoing(outgoing:P2POutgoing):
-	outgoing.poll()
-	if outgoing.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
-		if not outgoing.greeted_ka:
-			outgoing.greeted_ka = true
-			outgoing.send(JSON.stringify({"Type": "Greetings", "Me": my_id, "Version": my_version}))
-		if outgoing.get_available_packet_count() > 0:
-			var raw_packet = outgoing.get_packet()
-			var packet = JSON.parse_string(raw_packet)
-			if packet:
-				match packet:
-					{"Type": "Greetings", "Me": var who, "Version": var version}:
-						if version != my_version:
-							outgoing.send(JSON.stringify({"Type":"UnknownVersion"}))
-						else:
-							var new_id = str(who)
-							if new_id != outgoing.link.id:
-								logy("bootstrap", "[network:155]unknown outgoing " + str(outgoing.link.id) + " introduced itself as " + str(who))
-							else:
-								logy("bootstrap", "[network:157]outgoing " + str(outgoing.link.id) + " introduced itself as " + str(who))
-							if my_neighbors.has(new_id):
-								say_goodbye_to(new_id)
-							open_outgoing.erase(outgoing.link.id)
-							outgoing.link.id = new_id
-							my_neighbors[new_id] = outgoing.link
-							outgoing.queue_free()
-					{"Type" : "Who"}:
-						outgoing.send(JSON.stringify({"Type":"Me", "Me": my_id}))
-					_ :
-						logy("bootstrap_error", str(outgoing.link.id) + " sent unhandleed message:" + raw_packet)
-						outgoing.send(JSON.stringify({"Type":"InvalidSalutation"}))
-						remove_outgoing(outgoing.link.id)
-			else:
-				logy("bootstrap_error", str(outgoing.link.id) + " sent invaled message:" + raw_packet)
-				outgoing.send(JSON.stringify({"Type":"InvalidPacket"}))
-				remove_outgoing(outgoing.link.id)
-
-func process_packet(packet:Dictionary):
-	print("MyID:", my_id)
-	match packet:
-		{"Destination": my_id, "Source": var source, "Type" : "Who"}:
-			logy("packet", "[network:174] processing Who packet")
-			send({"Source": my_id, "Destination": source, "Type": {"Me": {"Me": my_id}}})
-		{"Destination": my_id,  "Source": _, "Type": {"Answer": {"Answer": var answer, "OfferID": var offer_id, "ICE": var ice}}}:
-			logy("packet", "[network:177] processing Answer packet")
-			if open_incoming.has(offer_id):
-				var incoming = open_incoming[offer_id]
-				incoming.give_answer(answer)
-				for thing in ice:
-					incoming.add_ice_candidate(thing.Media, thing.Index, thing.Name)
-				emit_signal("user_offer_completed", offer_id)
-		{"Destination": my_id, "Source": var source, "Type": {"Offer": { "OfferID" : var offer_id, "Offer" : var offer, "ICE" : var ice,}}}:
-			logy("packet", "[newtork:185] processing Offer packet")
-			var id = create_outgoing(offer_id, source)
-			var outgoing: P2POutgoing = get_outgoing_by_id(id)
-			outgoing.connect("answer_generated", on_outgoing_answer_generated)
-			outgoing.connect("new_ice_candidate", on_outgoing_new_ice_candidate)
-			outgoing.set_remote_description("offer", offer)
-			for thing in ice:
-				outgoing.add_ice_candidate(thing.Media, thing.Index, thing.Name)
-		{"Destination": my_id, .. }:
-			logy("error", "[network:199]" + str(packet.Source) + " sent me unhandleed message:" + str(packet.keys()))
-		{"Destination": "", "Source": var source, "Type":{"Offer": { "OfferID" : var offer_id, "Offer" : var offer, "ICE" : var ice,}}}:
-			logy("trace", "[network:201]" + str(packet.Source) + " user offer")
-			var id = create_outgoing(offer_id, source)
-			var outgoing: P2POutgoing = get_outgoing_by_id(id)
-			outgoing.connect("answer_generated", on_outgoing_user_answer_generated)
-			outgoing.connect("new_ice_candidate", on_outgoing_new_ice_candidate)
-			outgoing.set_remote_description("offer", offer)
-			for thing in ice:
-				outgoing.add_ice_candidate(thing.Media, thing.Index, thing.Name)
-		{"Destination": "", .. }:
-			logy("trace", "[network:203]" + str(packet.Source) + " user packet:" + JSON.stringify(packet.Type))
-		{"Destination": _, .. }:
-			send(packet)
-		_:
-			logy("error", "[newtork:196]" + str(packet.Source) + " sent unhandleed message:" + str(packet.keys()))
-
-
-func remove_incoming(id:String):
-	if open_incoming.has(id):
-		var incoming = open_incoming[id]
-		incoming.close()
-		open_incoming.erase(id)
-		incoming.queue_free()
-
-
-func remove_outgoing(id:String):
-	if open_outgoing.has(id):
-		var outgoing = open_outgoing[id]
-		outgoing.close()
-		open_outgoing.erase(id)
-		outgoing.queue_free()
-		emit_signal("user_answer_completed", id)
-
-
-func say_goodbye_to(id: String):
-	if my_neighbors.has(id):
-		var link: P2PLink = my_neighbors[id]
-		link.send(JSON.stringify({"Type":"Goodbye"}))
-		link.close()
-		my_neighbors.erase(id)
-
-
-func send(packet: Dictionary):
-	logy("trace", "[network:116]send()")
-	if packet.has("Destination"):
-		var dest = str(packet.Destination)
-		if my_neighbors.has(dest):
-			var link: P2PLink = my_neighbors[dest]
-			var jsoned := JSON.stringify(packet)
-			link.send(jsoned)
-		else:
-			logy("error", "[network:124]No known route to" + str(dest))
+func send(channel_id, packet: String):
+	if channel_id == 0:
+		print("Packet for user:", packet)
 	else:
-		logy("error", "[network:126]Packet has no Destination")
-	
+		links[channel_id].send(packet)
 
 
-func user_packet(msg):
-	var packet = JSON.parse_string(msg)
-	if packet:
-		logy("trace", "[network:250] user submitted:" + str(packet.keys()) + " to " + str(packet.Destination))
-		if not packet.has("Source"):
-			packet.Source = "User"
-		process_packet(packet)
-	else:
-		logy("error", "Could parse user packet as json")
+func user_packet(packet: String):
+	print("UP:", packet)
+	rust_logic.receive(0, packet)
 
 
-func on_outgoing_answer_generated(dict_answer: Dictionary):
-	logy("signal", "[network:268]on_outgoing_answer_generated(dict_answer: Dictionary)")
-	if open_outgoing.has(dict_answer.ID):
-		var outgoing = open_outgoing[dict_answer.ID]
-		logy("debug", "[network:271] it was answer for " + str(outgoing.destination))
-		send({"Source": my_id, "Destination": outgoing.destination, "Type": {"Answer": {"Answer": dict_answer.Answer, "OfferID": dict_answer.OfferID, "ICE": dict_answer.ICE}}})
-	else:
-		logy("error", "[network:274] got an `answer_generated` for" + str(dict_answer.ID) + "which I couldn't find")
+func on_answer_generated(dict_answer):
+	logy("signal", "[rustnetwork:109]on_answer_generated(dict_answer)")
+	rust_logic.on_answer_generated(dict_answer.ID, dict_answer.Answer)
 
 
-func on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name):
-	logy("signal", "[network:264]on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name)")
-	if open_outgoing.has(id):
-		var outgoing = open_outgoing[id]
-		if outgoing.destination == "":
-			emit_signal("user_answer", id)
-		else:
-			send({
-				"Source": my_id, 
-				"Destination": outgoing.destination, 
-				"Type": "newICE", 
-				"OfferID": offer_id, 
-				"ICE": [
-					{
-						"Media" : mid_name, 
-						"Index" : index_name, 
-						"Name" : sdp_name
-					}
-				]
-			})
-	else:
-		logy("error", "[network:279] Couldn't find outgoing with id" + str(id))
+func on_new_ice_candidate(id, mid_name, index_name, sdp_name):
+	rust_logic.on_new_ice_candidate(id, mid_name, index_name, sdp_name)
 
 
-func on_outgoing_user_answer_generated(dict_answer: Dictionary):
-	logy("signal", "[network:302]on_outgoing_user_answer_generated(dict_answer: Dictionary)")
-	if open_outgoing.has(dict_answer.ID):
-		var outgoing = open_outgoing[dict_answer.ID]
-		logy("debug", "[network:305] it was a user answer")
-		emit_signal("user_answer", dict_answer.ID)
-	else:
-		logy("error", "[network:308] got an `answer_generated` for" + str(dict_answer.ID) + "which I couldn't find")
+func on_offer_generated(dict_offer):
+	print("[rustnetwork:90]on_offer_generated(dict_offer)")
+	rust_logic.on_offer_generated(dict_offer.ID, dict_offer.Offer)
+
 
 func logy(lvl: String, msg: String):
 	print(lvl, msg)

@@ -3,7 +3,7 @@ class_name P2PNetwork
 signal user_answer(id)
 signal user_answer_completed(id)
 signal user_offer_completed(id)
-signal offer_generated(ided_offer: Dictionary)
+signal offer_generated(id)
 var my_version = "Rust:0.0"
 
 var my_id : String
@@ -33,8 +33,9 @@ func _process(_delta):
 
 func create_incoming() -> String:
 	var id : = "Incoming" + str(open_incoming.size())
-	var incoming= P2PIncoming.new(id)
+	var incoming := P2PIncoming.new(id)
 	incoming.connect("offer_generated", on_incoming_offer_generated)
+	incoming.create_offer()
 
 	open_incoming[id] = incoming
 	add_child(incoming)
@@ -271,8 +272,8 @@ func user_packet(msg):
 
 
 func on_incoming_offer_generated(dict_offer):
-	logy("signal", "[network:274] on_offer_generated(dict_offer)")
-	emit_signal("offer_generated", dict_offer)
+	logy("signal", "[network:275] on_offer_generated(dict_offer)")
+	emit_signal("offer_generated", dict_offer.ID)
 
 func on_outgoing_answer_generated(dict_answer: Dictionary):
 	logy("signal", "[network:268]on_outgoing_answer_generated(dict_answer: Dictionary)")
@@ -285,7 +286,7 @@ func on_outgoing_answer_generated(dict_answer: Dictionary):
 
 
 func on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name):
-	logy("signal", "[network:264]on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name)")
+	logy("signal", "[network:289]on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name)")
 	if open_outgoing.has(id):
 		var outgoing = open_outgoing[id]
 		if outgoing.destination == "":
@@ -305,7 +306,7 @@ func on_outgoing_new_ice_candidate(id, offer_id, mid_name, index_name, sdp_name)
 				]
 			})
 	else:
-		logy("error", "[network:279] Couldn't find outgoing with id" + str(id))
+		logy("error", "[network:309] Couldn't find outgoing with id" + str(id))
 
 
 func on_outgoing_user_answer_generated(dict_answer: Dictionary):

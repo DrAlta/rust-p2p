@@ -7,7 +7,7 @@ extends Control
 @onready var gui_user_answers : = $Open/HBox/UserAnswers
 @onready var gui_user_offers : = $Open/HBox/UserOffers
 @onready var network : = $P2PNetwork
-var showed_offer: String
+var showed_offer
 
 class UserOffer:
 	var node: Node
@@ -23,7 +23,7 @@ func _ready():
 	ctx.start(HashingContext.HASH_MD5)
 	ctx.update("test string".to_utf8_buffer())
 	print("[", ctx.finish().hex_encode(), "]")
-	network.connect("o")
+#	network.connect("offer_generated", on_network_offer_generated)
 #	network = P2PNetwork.new()
 
 
@@ -33,14 +33,13 @@ func _process(delta):
 
 
 func create_offer():
-	logy("trace", "[main:35]create_offer()")
+	logy("trace", "[main:36]create_offer()")
 	var offer_scene = user_offer_scene.instantiate()
 	offer_scene.connect("request_offer_show", on_request_offer_show)
 	offer_scene.connect("request_offer_copy", on_request_offer_copy)
 #	offer.connect("offer_generated", on_incoming_offer_generated)
 #	offer.create_offer()
 	gui_user_offers.add_child(offer_scene)
-
 	var id = network.create_incoming()
 	showed_offer = id
 	offer_scene.set_id(id)
@@ -88,12 +87,12 @@ func _on_connection_input_request_offer():
 	create_offer()
 
 
-func on_network_offer_generated(dict_offer):
+func on_network_offer_generated(offer_id):
 	logy("signal", "[main:91] on_network_offer_generated(dict_offer)")
-	if dict_offer.ID == showed_offer:
-		var jsoned = network.get_offer_json_by_id(dict_offer.ID);
+	if offer_id == showed_offer:
+		var jsoned = network.get_offer_json_by_id(offer_id);
 		if jsoned:
-			gui_offer_panel.set_offer(dict_offer.ID, jsoned)
+			gui_offer_panel.set_offer(offer_id, jsoned)
 
 
 func _on_show_open_pressed():

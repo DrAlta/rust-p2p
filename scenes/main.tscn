@@ -229,6 +229,7 @@ script = ExtResource("6_bma75")
 [connection signal="pressed" from="OfferPanel/HBoxContainer/Close" to="OfferPanel" method="_on_close_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/VBoxContainer/Copy" to="AnswerPanel" method="_on_copy_pressed"]
 [connection signal="pressed" from="AnswerPanel/HBoxContainer/Close" to="AnswerPanel" method="_on_close_pressed"]
+[connection signal="offer_generated" from="P2PNetwork" to="." method="on_network_offer_generated"]
 [connection signal="user_answer" from="P2PNetwork" to="." method="_on_network_user_answer"]
 [connection signal="user_answer_completed" from="P2PNetwork" to="." method="_on_network_user_answer_completed"]
 [connection signal="user_offer_completed" from="P2PNetwork" to="." method="_on_network_user_offer_completed"]
