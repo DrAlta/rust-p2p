@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::PeerID;
 
-type Observation = f64;
+type Observation = i64;
 type PacketID = usize;
 
 struct NeighborInfo {
@@ -100,8 +100,8 @@ impl NeighborInfo {
 
 }
 //////////////////////////////////////////////////////////
-fn calculate_cb<O: Clone + PartialOrd + std::ops::Add<f64, Output = O> + std::ops::Sub<f64, Output = O>>(observations: &Vec<O>, c: f64) -> [O; 2] {
-    let percentile_90 = percentile(observations, 0.9);
+fn calculate_cb<O: Clone + PartialOrd + TryInto<f64>>(observations: &Vec<O>, c: f64) -> [f64; 2] {
+    let percentile_90: f64 = percentile(observations, 0.9).try_into().unwrap_or(f64::MAX);
     let log_term = f64::ln(observations.len() as f64);
 
     let ucb = percentile_90.clone() + c * f64::sqrt(log_term / (2.0 * observations.len() as f64));
@@ -118,14 +118,14 @@ fn percentile<O: Clone + PartialOrd>(observations: &Vec<O>, percentile: f64) -> 
     sorted_observations[index].clone()
 }
 
-fn collect_observations(observations_map: &HashMap<PacketID, Observation>, count_and_first_observed: &HashMap<PacketID, (i8, Observation)>) -> Vec<Observation>{
+fn collect_observations(observations_map: &HashMap<PacketID, Observation>, count_and_first_observed: &HashMap<PacketID, (i8, Observation)>) -> Vec<u32>{
     let mut observations = Vec::new();
     for (packet_id, o) in observations_map {
         let Some((times_observed, first_observation)) =  count_and_first_observed.get(packet_id) else {
             continue
         };
         if times_observed >= &3 {
-            observations.push(o - first_observation);
+            observations.push((o - first_observation).try_into().unwrap_or(u32::MAX));
         }
     }
     observations
@@ -140,19 +140,19 @@ fn main() {
     let c = "c".to_string();
     let d = "d".to_string();
 
-    n.observe(&a, &1, 1.0);
-    n.observe(&b, &1, 1.5);
-    n.observe(&c, &1, 2.0);
+    n.observe(&a, &1, 10);
+    n.observe(&b, &1, 15);
+    n.observe(&c, &1, 20);
 
-    n.observe(&a, &2, 2.0);
-    n.observe(&b, &2, 2.3);
-    n.observe(&c, &2, 2.6);
-    n.observe(&d, &2, 3.0);
+    n.observe(&a, &2, 20);
+    n.observe(&b, &2, 23);
+    n.observe(&c, &2, 26);
+    n.observe(&d, &2, 30);
 
-    n.observe(&a, &3, 1.0);
-    n.observe(&b, &3, 1.5);
+    n.observe(&a, &3, 10);
+    n.observe(&b, &3, 15);
 
     let d = n.ucb_scoring(con);
     println!("{d:#?}");
-    n.collect_garbage_after_limit(0.0);
+    n.collect_garbage_after_limit(00);
 }
