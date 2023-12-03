@@ -152,4 +152,11 @@ impl RustLogic {
             )
         };
     }
+    /* this is how to conver a sting into a PackedByteArray
+    #[func]
+    pub fn test() -> godot::builtin::PackedByteArray {
+        "test".to_string().as_bytes().into()
+    }
+    */
+
 }

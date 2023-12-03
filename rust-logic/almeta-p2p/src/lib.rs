@@ -11,6 +11,7 @@ mod node;
 pub use node::Node;
 pub mod packet;
 pub use packet::Packet;
+pub mod scoring;
 mod user_json;
 pub use user_json::UserJSON;
 

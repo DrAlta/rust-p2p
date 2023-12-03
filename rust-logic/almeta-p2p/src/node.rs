@@ -126,8 +126,12 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     self.neighbors.insert(me, channel_id.clone());
                 }
             },
-            DirectPacket::Me { .. } => todo!(),
-            DirectPacket::Who => todo!(),
+            DirectPacket::Me { .. } => {
+
+            },
+            DirectPacket::Who => {
+                self.send_direct(channel_id.clone(), DirectPacket::Me { me: self.my_id.clone() });
+            },
             DirectPacket::UnknownVersion => todo!(),
             DirectPacket::NotYouAgain => {
                 // ToDo
@@ -206,7 +210,7 @@ impl<Answer, Offer> Node<Answer, Offer> {
         self.command_queue.push_back(Command::GenerateAnswer{channel_id: channel_id.clone(), offer});
         channel_id
     }
-   pub fn receive_answer(&mut self, channel_id: ChannelID, answer: Answer) {
+    pub fn receive_answer(&mut self, channel_id: ChannelID, answer: Answer) {
     logy!("trace", "{:?} received answer", self.my_id);
     self.command_queue.push_back(Command::AnswerOffer { channel_id, answer });
 
