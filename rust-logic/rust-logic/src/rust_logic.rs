@@ -1,4 +1,4 @@
-use almeta_p2p::ChannelID;
+use almeta_p2p::LinkID;
 use almeta_p2p::ICE;
 use godot::prelude::*;
 use godot::engine::RefCounted;
@@ -34,22 +34,26 @@ impl IRefCounted for RustLogic {
 #[godot_api]
 impl RustLogic {
     #[func]
-    fn channel_established(&mut self, channel_id: ChannelID) {
-        self.node.channel_established(&channel_id)
+    pub fn channel_closed(&mut self, link_id: LinkID) {
+        self.node.channel_closed(&link_id)
     }
     #[func]
-    fn generate_offer(&mut self) -> ChannelID {
+    fn channel_established(&mut self, link_id: LinkID) {
+        self.node.channel_established(&link_id)
+    }
+    #[func]
+    fn generate_offer(&mut self) -> LinkID {
         self.node.generate_offer(true)
     }
     #[func]
-    fn get_answer_json_by_id(&self, offer_id: ChannelID) -> String {
+    fn get_answer_json_by_id(&self, offer_id: LinkID) -> String {
         let Some(thing) = self.node.get_answer_json_by_id(&offer_id) else {
             return "".into()
         };
         thing
     }
     #[func]
-    fn get_offer_json_by_id(&self, offer_id: ChannelID) -> String {
+    fn get_offer_json_by_id(&self, offer_id: LinkID) -> String {
         let Some(thing) = self.node.get_offer_json_by_id(&offer_id) else {
             return "".into()
         };
@@ -60,18 +64,18 @@ impl RustLogic {
     // signals
 
     #[func]
-    fn on_answer_generated(&mut self, channel_id: ChannelID, answer: Answer) {
-        self.node.on_answer_generated(&channel_id, answer)
+    fn on_answer_generated(&mut self, link_id: LinkID, answer: Answer) {
+        self.node.on_answer_generated(&link_id, answer)
     }
     #[func]
-    fn on_offer_generated(&mut self, channel_id: ChannelID, offer: String) {
-        self.node.on_offer_generated(&channel_id, offer)
+    fn on_offer_generated(&mut self, link_id: LinkID, offer: String) {
+        self.node.on_offer_generated(&link_id, offer)
     }
 
     #[func]
-    fn on_new_ice_candidate(&mut self, channel_id: ChannelID, media: String, index: i64, sdp: String) {
+    fn on_new_ice_candidate(&mut self, link_id: LinkID, media: String, index: i64, sdp: String) {
         let ice = ICE::new(media, index, sdp);
-        self.node.add_ice(&channel_id, ice);
+        self.node.add_ice(&link_id, ice);
     }
 
 
@@ -87,49 +91,49 @@ impl RustLogic {
             return dict;
         };
         match command {
-            almeta_p2p::Command::AddICE { channel_id, ice } => {
+            almeta_p2p::Command::AddICE { link_id, ice } => {
                 dict.insert("Command", "AddICE");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Index",ice.index);
                 dict.insert("Media",ice.media);
                 dict.insert("Name",ice.name);
             },
-            almeta_p2p::Command::AnswerOffer { channel_id, answer } => {
+            almeta_p2p::Command::AnswerOffer { link_id, answer } => {
                 dict.insert("Command", "AnswerOffer");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Answer", answer);
 
             },
-            almeta_p2p::Command::GenerateAnswer { channel_id, offer } => {
+            almeta_p2p::Command::GenerateAnswer { link_id, offer } => {
                 dict.insert("Command", "GenerateAnswer");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Offer", offer);
             },
-            almeta_p2p::Command::GenerateOffer(channel_id) => {
+            almeta_p2p::Command::GenerateOffer(link_id) => {
                 dict.insert("Command", "GenerateOffer");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
 
             },
-            almeta_p2p::Command::Send { channel_id, packet } => {
+            almeta_p2p::Command::Send { link_id, packet } => {
                 dict.insert("Command", "Send");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Packet", serde_json::to_string(&packet).unwrap());
 
             },
-            almeta_p2p::Command::SendDirect { channel_id, packet } => {
+            almeta_p2p::Command::SendDirect { link_id, packet } => {
                 dict.insert("Command", "SendDirect");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Packet", serde_json::to_string(&packet).unwrap());
             },
-            almeta_p2p::Command::UserAnswer { channel_id, answer } => {
+            almeta_p2p::Command::UserAnswer { link_id, answer } => {
                 dict.insert("Command", "UserAnswer");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Answer", answer);
 
             },
-            almeta_p2p::Command::UserOffer { channel_id, offer } => {
+            almeta_p2p::Command::UserOffer { link_id, offer } => {
                 dict.insert("Command", "UserOffer");
-                dict.insert("ChannelID", channel_id);
+                dict.insert("LinkID", link_id);
                 dict.insert("Offer", offer);
             },
         }
@@ -138,15 +142,15 @@ impl RustLogic {
 
 
     #[func]
-    fn receive_packet(&mut self, channel_id: ChannelID, json_packet: String) {
+    fn receive_packet(&mut self, link_id: LinkID, json_packet: String) {
         if let Ok(packet) = serde_json::from_str::<Packet::<Answer, Offer>>(&json_packet) {
-            self.node.receive_packet(&channel_id, packet)
+            self.node.receive_packet(&link_id, packet)
         } else if let Ok(packet) = serde_json::from_str::<DirectPacket>(&json_packet) {
-            self.node.receive_direct(&channel_id, packet)
+            self.node.receive_direct(&link_id, packet)
         } else {
             self.node.command_queue.push_back(
                 almeta_p2p::Command::SendDirect { 
-                    channel_id, 
+                    link_id, 
                     packet: DirectPacket::InvalidPacket
                 }
             )

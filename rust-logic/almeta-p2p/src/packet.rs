@@ -18,7 +18,7 @@
 //!     }
 //! }:
 use serde::{Deserialize, Serialize};
-use crate::ChannelID;
+use crate::LinkID;
 
 use super::{OfferID, PeerID, ICE};
 
@@ -29,13 +29,13 @@ pub struct Packet<Answer, Offer> {
     pub source: PeerID, 
     #[serde(rename = "Destination")]
     pub destination: PeerID, 
-    #[serde(rename = "Type")]
-    pub r#type: PacketType<Answer, Offer>,
+    #[serde(rename = "Body")]
+    pub body: PacketBody<Answer, Offer>,
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum PacketType<Answer, Offer> {
+pub enum PacketBody<Answer, Offer> {
     Answer{
         #[serde(rename = "Answer")]
         answer: Answer,
@@ -54,18 +54,27 @@ pub enum PacketType<Answer, Offer> {
     },
     InvalidPacket,
     Goodbye,
+    //MyNeighbors(Vec<PeerID>),
     NewICE{
-        #[serde(rename = "ChannelID")]
-        channel_id: ChannelID,
+        #[serde(rename = "LinkID")]
+        link_id: LinkID,
         #[serde(rename = "ICE")]
         ice: ICE,
-    }
+    },
+    RequestTraceToMe,
+    ReturnRouteTrace(Vec<PeerID>),
+ //   WhoAreYourNeighbors,
+    /* this is for unknown packets
+    #[serde(untagged)]
+    Json(serde_json::Value),
+    */
+
 }
 
 pub fn main(){
-    let inner = PacketType::<String, String>::Answer { answer: "spam".into(), offer_id: 69, ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
+    let inner = PacketBody::<String, String>::Answer { answer: "spam".into(), offer_id: 69, ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
     //let outer = Outer::Answer(inner);
-    let packet = Packet{source: "Source".into(), destination: "Destination".into(),r#type: inner};
+    let packet = Packet{source: "Source".into(), destination: "Destination".into(),body: inner};
     println!("\n{}\n", serde_json::to_string(&packet).unwrap());
     println!("{}\n", serde_json::to_string(&packet).unwrap());
 

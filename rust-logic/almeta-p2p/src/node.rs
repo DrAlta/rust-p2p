@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
-use crate::{logy, OfferID, packet::PacketType};
+use crate::{logy, OfferID, packet::PacketBody};
 
-use super::{ChannelID, Command, ICE, DirectPacket, Packet, PeerID, Incoming, Outgoing};
+use super::{LinkID, Command, ICE, DirectPacket, Packet, PeerID, routing_entry::{RoutingCost, RoutingEntry}, Incoming, Outgoing};
 
-
+const PROTOCAL_VERSION: &str = concat!("Rust", ":", "0.1");
 
 #[derive(Debug)]
 pub struct Node<Answer, Offer> {
@@ -11,21 +11,26 @@ pub struct Node<Answer, Offer> {
 
     pub my_id: PeerID,
 
-    neighbors: HashMap<PeerID, ChannelID>,
-    
-    channel_id_generator_state: i8,
+    neighbors: HashMap<PeerID, LinkID>,
 
-    incoming: HashMap<ChannelID, Incoming<Offer>>,
-    outgoing: HashMap<ChannelID, Outgoing<Answer>>,
+    routing_table: HashMap<PeerID, RoutingEntry>,
+    
+    link_id_generator_state: i8,
+
+    incoming: HashMap<LinkID, Incoming<Offer>>,
+    outgoing: HashMap<LinkID, Outgoing<Answer>>,
 }
 
 /// Creation
 impl<Answer, Offer> Node<Answer, Offer> {
     pub fn new(my_id: String) -> Self {
+        let my_id = my_id.into();
         Self {
             command_queue: VecDeque::new(), 
-            my_id, neighbors: HashMap::from([("User".into(), 0)]), 
-            channel_id_generator_state: 0, 
+            my_id, 
+            neighbors: HashMap::from([("User".into(), 0)]),
+            routing_table: HashMap::from([("User".into(), RoutingEntry::new(0,0))]),
+            link_id_generator_state: 0, 
             incoming: HashMap::new(),
             outgoing: HashMap::new(),
         }
@@ -34,23 +39,28 @@ impl<Answer, Offer> Node<Answer, Offer> {
 
 impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Answer, Offer> {
     /*
-    pub fn generate_offer(&mut self) -> ChannelID {
-        self.channel_id_generator_state += 1;
-        let channel_id: ChannelID = self.channel_id_generator_state.into();
-        self.command_queue.borrow_mut().push(Command::GenerateOffer(channel_id.clone()));
-        channel_id
+    pub fn generate_offer(&mut self) -> LinkID {
+        self.link_id_generator_state += 1;
+        let link_id: LinkID = self.link_id_generator_state.into();
+        self.command_queue.borrow_mut().push(Command::GenerateOffer(link_id.clone()));
+        link_id
     }
     */
-    pub fn channel_established(&mut self, channel_id: &ChannelID) {
-        self.incoming.remove(channel_id);
-        self.outgoing.remove(channel_id);
-  
-        self.send_direct(channel_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), version: "Rust:0.0".into() })
+    pub fn channel_closed(&mut self, link_id: &LinkID) {
+        self.neighbors.retain(|_peer_id, test_link_id| test_link_id != link_id);
+        self.incoming.remove(link_id);
+        self.outgoing.remove(link_id);
     }
-    pub fn get_answer_json_by_id(&self, channel_id: &ChannelID) -> Option<String> {
-        let outgoing = self.outgoing.get(channel_id)?;
+    pub fn channel_established(&mut self, link_id: &LinkID) {
+        self.incoming.remove(link_id);
+        self.outgoing.remove(link_id);
+  
+        self.send_direct(link_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), supported_versions: Vec::from([PROTOCAL_VERSION.into()]) })
+    }
+    pub fn get_answer_json_by_id(&self, link_id: &LinkID) -> Option<String> {
+        let outgoing = self.outgoing.get(link_id)?;
         let answer = outgoing.answer.clone()?;
-        let inner = PacketType::<Answer, Offer>::Answer { 
+        let inner = PacketBody::<Answer, Offer>::Answer { 
             answer: answer, 
             offer_id: outgoing.offer_id.clone(), 
             ice: outgoing.ice.clone()
@@ -58,161 +68,357 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         let user = Packet{
             source: "User".into(),
             destination: self.my_id.clone(),
-            r#type: inner
+            body: inner
         };
         serde_json::to_string(&user).ok()
     }
-    pub fn get_offer_json_by_id(&self, channel_id: &ChannelID) -> Option<String> {
-        let incoming = self.incoming.get(channel_id)?;
+    pub fn get_offer_json_by_id(&self, link_id: &LinkID) -> Option<String> {
+        let incoming = self.incoming.get(link_id)?;
         let offer = incoming.offer.clone()?;
-        let inner = PacketType::<Answer, Offer>::Offer { 
+        let inner = PacketBody::<Answer, Offer>::Offer { 
             offer: offer, 
-            offer_id: channel_id.clone(),
+            offer_id: link_id.clone(),
             ice: incoming.ice.clone()
         };
         let user = Packet{
             source: "User".into(),
             destination: self.my_id.clone(),
-            r#type: inner
+            body: inner
         };
         serde_json::to_string(&user).ok()
     }
-    pub fn generate_offer(&mut self, user: bool) -> ChannelID {
-        self.channel_id_generator_state += 1;
-        let channel_id: ChannelID = self.channel_id_generator_state.into();
-        self.incoming.insert(channel_id.clone(), Incoming::new(None, Vec::new(), user));
-        self.command_queue.push_back(Command::GenerateOffer(channel_id.clone()));
-        channel_id
+    pub fn generate_offer(&mut self, user: bool) -> LinkID {
+        self.link_id_generator_state += 1;
+        let link_id: LinkID = self.link_id_generator_state.into();
+        self.incoming.insert(link_id.clone(), Incoming::new(None, Vec::new(), user));
+        self.command_queue.push_back(Command::GenerateOffer(link_id.clone()));
+        link_id
     }
     /*
-    pub fn generate_offer(&mut self) -> ChannelID{
+    pub fn generate_offer(&mut self) -> LinkID{
         self.g
         self.incoming.insert(k, v)
         self.command_queue.borrow_mut().push(Command::GenerateOffer);
     }
     */
-    pub fn on_answer_generated(&mut self, channel_id: &ChannelID, answer: Answer) {
-        logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, channel_id);
-        let Some(outgoing) = self.outgoing.get_mut(channel_id) else {
-            logy!("trace", "coundn't find outgoing {channel_id}");
+    pub fn on_answer_generated(&mut self, link_id: &LinkID, answer: Answer) {
+        logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, link_id);
+        let Some(outgoing) = self.outgoing.get_mut(link_id) else {
+            logy!("trace", "coundn't find outgoing {link_id}");
             return
         };
         if outgoing.user {
-            self.command_queue.push_back(Command::UserAnswer { channel_id: channel_id.clone(), answer: answer.clone() });
+            self.command_queue.push_back(Command::UserAnswer { link_id: link_id.clone(), answer: answer.clone() });
         }
         outgoing.answer = Some(answer);
     }
-    pub fn on_offer_generated(&mut self, channel_id: &ChannelID, offer: Offer) {
-        let Some(incoming) = self.incoming.get_mut(channel_id) else {
-            logy!("tracenode", "incoming {channel_id:?} not found");
+    pub fn on_offer_generated(&mut self, link_id: &LinkID, offer: Offer) {
+        let Some(incoming) = self.incoming.get_mut(link_id) else {
+            logy!("tracenode", "incoming {link_id:?} not found");
             return
         };
         if incoming.user {
-            logy!("tracenode", " received offer for user on channel {channel_id:?}");
-            self.command_queue.push_back(Command::UserOffer { channel_id: channel_id.clone(), offer: offer.clone() });
+            logy!("tracenode", " received offer for user on channel {link_id:?}");
+            self.command_queue.push_back(Command::UserOffer { link_id: link_id.clone(), offer: offer.clone() });
         }
         incoming.offer = Some(offer)
     }
-    pub fn receive_direct(&mut self, channel_id: &ChannelID, packet: DirectPacket) {
+    pub fn receive_direct(&mut self, link_id: &LinkID, packet: DirectPacket) {
         match packet {
-            DirectPacket::Greetings { me, version } => {
-                if version != "Rust:0.0" {
-                    self.send_direct(channel_id.clone(), DirectPacket::UnknownVersion);
+            DirectPacket::DearJohn => {
+                let Some(peer_id) = self.get_peer_id_from_link_id(link_id) else {
                     return
-                }
-                if self.neighbors.get(&me).is_some() {
-                    self.send_direct(channel_id.clone(), DirectPacket::NotYouAgain)
-                } else {
-                    self.neighbors.insert(me, channel_id.clone());
+                };
+                if ! self.is_keeper(&peer_id) {
+                    self.send_direct(link_id.clone(), DirectPacket::Goodbye);
                 }
             },
+            DirectPacket::Goodbye => todo!(),
+            DirectPacket::Greetings { me, supported_versions } => {
+                let version = PROTOCAL_VERSION.into();
+                if supported_versions.contains(&version) {
+                    if self.neighbors.get(&me).is_some() {
+                        self.send_direct(link_id.clone(), DirectPacket::NotYouAgain)
+                    } else {
+                        self.neighbors.insert(me, link_id.clone());
+                        self.send_direct(link_id.clone(), DirectPacket::TellItToMeIn(version))
+                    }
+                } else {
+                    self.send_direct(link_id.clone(), DirectPacket::UnknownVersion);
+                }
+            },
+            DirectPacket::InvalidPacket => todo!(),
+            DirectPacket::InvalidSalutation => todo!(),
             DirectPacket::Me { .. } => {
 
             },
-            DirectPacket::Who => {
-                self.send_direct(channel_id.clone(), DirectPacket::Me { me: self.my_id.clone() });
-            },
-            DirectPacket::UnknownVersion => todo!(),
             DirectPacket::NotYouAgain => {
                 // ToDo
                 ()
             },
-            DirectPacket::InvalidPacket => todo!(),
-            DirectPacket::InvalidSalutation => todo!(),
-            DirectPacket::Goodbye => todo!(),
+            DirectPacket::RouteTraceFromOriginatorToTarget { target, mut trace } => {
+                let Some(originator) = trace.get(0) else {
+                    return 
+                };
+                if &self.my_id == &target {
+                    let target = originator.clone();
+                    let packet_body = PacketBody::ReturnRouteTrace(trace);
+                    self.send_to(target, packet_body);
+                    return
+                }
+                let Some(next_hop) = self.get_next_hop_to(&target) else {
+                    return
+                };
+                trace.push(self.my_id.clone());
+                let new_packet = DirectPacket::RouteTraceFromOriginatorToTarget{
+                    target, 
+                    trace
+                };
+                self.send_direct(next_hop, new_packet)
+            },
+            DirectPacket::RouteTraceToOriginatorFromTarget { originator, mut trace } => {
+                let Some(_target) = trace.get(0) else {
+                    logy!("networkerror", "recieved empty RouteTraceToSourceFromDestination for {originator}, nothin we can do about it");
+                    return
+                };
+                if &originator == &self.my_id {
+                    // this trace was emnt for us so handle it
+                    return
+                    /*
+                    let Some(last_hop) = trace.last() else {
+                        logy!("networkingerror", "the trace is empty but that is impossible as we know then is atleast the source in the trace.");
+                        return
+                    };
+                    if let Some(next_hop) = self.get_next_hop_to(destination) {
+                        if link_id == &next_hop {
+
+                        }
+                    } else {
+                        self.routing_table.insert(destination.clone(), RoutingEntry::new(link_id.clone(), trace.len() as u32))
+                    };
+                    */
+                } else {
+                    let Some(next_hop) = self.get_next_hop_to(&originator) else {
+                        return
+                    };
+                    trace.push(self.my_id.clone());
+                    let new_packet = DirectPacket::RouteTraceToOriginatorFromTarget{
+                        originator, 
+                        trace
+                    };
+                    self.send_direct(next_hop, new_packet)
+                }
+            },
+
+            DirectPacket::RoutingInformationExchange(entries) => {
+                self.update_routing_table(link_id, entries);
+            },
+            DirectPacket::TellItToMeIn(version) => {
+                // Todo need to store this the use it when talking to them.
+                if &version != PROTOCAL_VERSION {
+                    self.send_direct(link_id.clone(), DirectPacket::UnknownVersion);
+                }
+            }
+            DirectPacket::UnknownVersion => todo!(),
+            DirectPacket::Who => {
+                self.send_direct(link_id.clone(), DirectPacket::Me { me: self.my_id.clone() });
+            },
         };
     }
-    pub fn receive_packet(&mut self, _channel_id: &ChannelID, packet: Packet<Answer, Offer>) {
+    pub fn receive_packet(&mut self, _link_id: &LinkID, packet: Packet<Answer, Offer>) {
         if packet.destination == self.my_id {
-            match packet.r#type {
-                crate::packet::PacketType::Answer { answer, offer_id, ice} => {
-                    self.command_queue.push_back(Command::AnswerOffer { channel_id: offer_id, answer });
+            match packet.body {
+                PacketBody::Answer { answer, offer_id, ice} => {
+                    self.command_queue.push_back(Command::AnswerOffer { link_id: offer_id, answer });
                     for icee in ice {
-                        self.command_queue.push_back(Command::AddICE { channel_id: offer_id.clone(), ice: icee});
+                        self.command_queue.push_back(Command::AddICE { link_id: offer_id.clone(), ice: icee});
                     };
                 },
-                crate::packet::PacketType::Offer {offer, offer_id, ice} => {
-                    let id = self.receive_offer(offer, offer_id, packet.source == "User");
-                    for icee in ice {
-                        self.command_queue.push_back(Command::AddICE { channel_id: id.clone(), ice: icee});
-                    };
-                },
-                crate::packet::PacketType::InvalidPacket => {
+                PacketBody::Goodbye => todo!(),
+                PacketBody::InvalidPacket => {
                     logy!("error", "Got a reply that I sent a invalid packet");
                 },
-                crate::packet::PacketType::Goodbye => todo!(),
-                crate::packet::PacketType::NewICE { channel_id, ice } => {
-                    let Some(incoming) = self.incoming.get_mut(&channel_id) else {
-                        logy!("error", "couldn't find an incoming for {}", channel_id);
+                PacketBody::Offer {offer, offer_id, ice} => {
+                    let id = self.receive_offer(offer, offer_id, packet.source == "User".into());
+                    for icee in ice {
+                        self.command_queue.push_back(Command::AddICE { link_id: id.clone(), ice: icee});
+                    };
+                },
+/* Decided to go with a diffrant route :P
+                PacketBody::MyNeighbors(_) => {
+                },
+*/
+                PacketBody::NewICE { link_id, ice } => {
+                    let Some(incoming) = self.incoming.get_mut(&link_id) else {
+                        logy!("error", "couldn't find an incoming for {}", link_id);
                         return
                     };
                     incoming.ice.push(ice.clone());
-                    //self.command_queue.push_back(Command::AddICE { channel_id, ice});
+                    //self.command_queue.push_back(Command::AddICE { link_id, ice});
                     /*
                     for ice in ice {
-                        self.command_queue.push_back(Command::AddICE { channel_id: channel_id.clone(), ice});
+                        self.command_queue.push_back(Command::AddICE { link_id: link_id.clone(), ice});
                     }
                     */
 
                 },
+                PacketBody::RequestTraceToMe => {
+                    let Some(next_hop) = self.get_next_hop_to(&packet.source) else {
+                        return
+                    };
+
+                    let new_packet = DirectPacket::RouteTraceToOriginatorFromTarget{
+                        originator: packet.source, 
+                        trace: Vec::from([self.my_id.clone()])
+                    };
+                    self.send_direct(next_hop, new_packet)
+                },
+                PacketBody::ReturnRouteTrace(mut trace) => {
+                    if Some(&self.my_id) == trace.get(0) {
+                        // it was a trace from us to `packet.source`
+                        let Some(first_hop) = trace.get(1) else {
+                            return
+                        };
+                        if let Some(next_hop) = self.get_next_hop_to(&packet.source) {
+                            let Some(next_hop_peer_id) = self.get_peer_id_from_link_id(&next_hop) else {
+                                logy!("networkingerror", "if we are routing thou a link then we should be a link to a neighbor");
+                                return;
+                            };
+                            if &next_hop_peer_id == first_hop {
+                                // check if we in the trace;
+                                //first remove ourselve from the trace.
+                                trace.swap_remove(0);
+                                if trace.contains(&self.my_id) {
+                                    return
+                                }
+                                self.routing_table.insert(
+                                    packet.source, 
+                                    RoutingEntry::new(
+                                        next_hop, 
+                                        // add one to the cost because the tace does include the ending peer(it can be find from the packet source) and re removed oursef from it
+                                        trace.len() as u32 + 1));
+                            }
+                        }
+                    } else {
+                        logy!("networkerror", "we got a trace that didn't start with us");
+                    }
+                },
+/*  Decided to go with a diffrant route :P
+                PacketBody::WhoAreYourNeighbors => {
+                    let my_neighbors = self.neighbors.keys().map(|x| x.clone()).collect();
+                    self.command_queue.push_back(
+                        Command::Send { 
+                            link_id: link_id.clone(), 
+                            packet: Packet{
+                                source: self.my_id.clone(), 
+                                destination: packet.source, 
+                                body: PacketBody::<Answer, Offer>::MyNeighbors(my_neighbors)
+                            }
+                        }
+                    );
+                }
+*/
             }
         } else {
             self.send_packet(packet);
         }
     }
-    pub fn select_channel(&self, peer_id: &PeerID) -> Option<ChannelID> {
+    pub fn get_next_hop_to(&self, peer_id: &PeerID) -> Option<LinkID> {
         self.neighbors.get(peer_id).cloned()
     }
-    pub fn send_direct(&mut self, channel_id: ChannelID, packet: DirectPacket) {
-        self.command_queue.push_back(Command::SendDirect { channel_id, packet });
+    pub fn send_direct(&mut self, link_id: LinkID, packet: DirectPacket) {
+        self.command_queue.push_back(Command::SendDirect { link_id, packet });
     }
     pub fn send_packet(&mut self, packet: Packet<Answer, Offer>) {
-        let Some(channel_id) = self.select_channel(&packet.destination) else {
+        let Some(link_id) = self.get_next_hop_to(&packet.destination) else {
             logy!("error", "Couldn't find next node to {}", packet.destination);
             return
         };
-        self.command_queue.push_back(Command::Send { channel_id, packet });
+        self.command_queue.push_back(Command::Send { link_id, packet });
     }
-    pub fn add_ice(&mut self, channel_id: &ChannelID, ice: ICE) {
-        if let Some(incoming) = self.incoming.get_mut(channel_id) {
+    pub fn send_overriding_routing(&mut self, link_id: &LinkID, destination: PeerID, packet_body: PacketBody<Answer, Offer>) {
+        let packet = Packet { source:self.my_id.clone(), destination, body: packet_body };
+        self.command_queue.push_back(Command::Send { link_id: link_id.clone(), packet });
+    }
+    pub fn send_to(&mut self, destination: PeerID, packet_body: PacketBody<Answer, Offer>) {
+        let Some(link_id) = self.get_next_hop_to(&destination) else {
+            logy!("error", "Couldn't find next node to {}", destination);
+            return
+        };
+        let packet = Packet { source:self.my_id.clone(), destination, body: packet_body };
+        self.command_queue.push_back(Command::Send { link_id, packet });
+    }
+    pub fn add_ice(&mut self, link_id: &LinkID, ice: ICE) {
+        if let Some(incoming) = self.incoming.get_mut(link_id) {
             incoming.ice.push(ice);
-        } else if let Some(outgoing) = self.outgoing.get_mut(channel_id) {
+        } else if let Some(outgoing) = self.outgoing.get_mut(link_id) {
             outgoing.ice.push(ice);
         }
     }
 }
 
 impl<Answer, Offer> Node<Answer, Offer> {
-    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> ChannelID {
-        self.channel_id_generator_state += 1;
-        let channel_id: ChannelID = self.channel_id_generator_state.into();
-        self.outgoing.insert(channel_id, Outgoing::new(offer_id, None, Vec::new(), user));
-        self.command_queue.push_back(Command::GenerateAnswer{channel_id: channel_id.clone(), offer});
-        channel_id
+    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> LinkID {
+        self.link_id_generator_state += 1;
+        let link_id: LinkID = self.link_id_generator_state.into();
+        self.outgoing.insert(link_id, Outgoing::new(offer_id, None, Vec::new(), user));
+        self.command_queue.push_back(Command::GenerateAnswer{link_id: link_id.clone(), offer});
+        link_id
     }
-    pub fn receive_answer(&mut self, channel_id: ChannelID, answer: Answer) {
+    pub fn receive_answer(&mut self, link_id: LinkID, answer: Answer) {
     logy!("trace", "{:?} received answer", self.my_id);
-    self.command_queue.push_back(Command::AnswerOffer { channel_id, answer });
+    self.command_queue.push_back(Command::AnswerOffer { link_id, answer });
+
+    }
+}
+
+/// Internal
+impl<Answer, Offer> Node<Answer, Offer> {
+    /// is_keeper() returns  true if we want to keep a connection to the peer and false if we don't mind disconnecting from them
+    fn is_keeper(&self, _peer_id: &PeerID) -> bool {
+        true
+    }
+    fn get_peer_id_from_link_id(&self, link_id: &LinkID) -> Option<PeerID> {
+        for (peer_id, test_link_id) in &self.neighbors {
+            if link_id == test_link_id {
+                return Some(peer_id.clone())
+            }
+        }
+        None
+    }
+}
+
+/// routing
+ 
+impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize>  Node<Answer, Offer> {
+    fn update_routing_table(&mut self, link_id: &LinkID, entries: Vec<(PeerID, RoutingCost)>) {
+        for (peer_id, routing_cost) in entries {
+            if let Some(current_entry) = self.routing_table.get_mut(&peer_id) {
+                if routing_cost <= current_entry.routing_cost {
+                    // Update the routing table if a better route is found
+                    let _ = std::mem::replace(current_entry, RoutingEntry{next_hop: link_id.clone(), routing_cost: routing_cost + 1});
+                } else if link_id == &current_entry.next_hop {
+                    self.send_direct(
+                        link_id.clone(), 
+                        DirectPacket::RouteTraceFromOriginatorToTarget { 
+                            target: peer_id, 
+                            trace: Vec::from([self.my_id.clone()])
+                        }
+                    );
+                    //overriding_routing(link_id, peer_id.clone(), PacketBody::RequestTraceToMe);
+                    //todo!("need to request a trace route to {peer_id}");
+                }
+            }
+        }
+    }
+    #[allow(dead_code)]
+    fn direct_broadcast(&mut self, exclude: Option<&LinkID>, packet:DirectPacket) {
+        for (_, neighbor_link) in &self.neighbors {
+            if Some(neighbor_link) == exclude {
+                continue;
+            }
+            self.command_queue.push_back(Command::SendDirect { link_id: neighbor_link.clone(), packet: packet.clone() });
+        }
 
     }
 }

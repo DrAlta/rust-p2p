@@ -1,12 +1,12 @@
-use super::{ChannelID, ICE, Packet, DirectPacket};
+use super::{LinkID, ICE, Packet, DirectPacket};
 #[derive(Debug)]
 pub enum Command<Answer, Offer> {
-    AddICE{channel_id: ChannelID, ice: ICE},
-    AnswerOffer{channel_id: ChannelID, answer: Answer},
-    GenerateAnswer{channel_id: ChannelID, offer: Offer},
-    GenerateOffer(ChannelID),
-    Send{channel_id: ChannelID, packet: Packet<Answer, Offer>},
-    SendDirect{channel_id: ChannelID, packet: DirectPacket},
-    UserAnswer{channel_id: ChannelID, answer: Answer},
-    UserOffer{channel_id: ChannelID, offer: Offer},
+    AddICE{link_id: LinkID, ice: ICE},
+    AnswerOffer{link_id: LinkID, answer: Answer},
+    GenerateAnswer{link_id: LinkID, offer: Offer},
+    GenerateOffer(LinkID),
+    Send{link_id: LinkID, packet: Packet<Answer, Offer>},
+    SendDirect{link_id: LinkID, packet: DirectPacket},
+    UserAnswer{link_id: LinkID, answer: Answer},
+    UserOffer{link_id: LinkID, offer: Offer},
 }

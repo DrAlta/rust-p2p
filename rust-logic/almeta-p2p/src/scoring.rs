@@ -135,10 +135,10 @@ fn collect_observations(observations_map: &HashMap<PacketID, Observation>, count
 fn main() {
     let con = 0.5;
     let mut n = NeighborInfo::new();
-    let a = "a".to_string();
-    let b = "b".to_string();
-    let c = "c".to_string();
-    let d = "d".to_string();
+    let a = "a".into();
+    let b = "b".into();
+    let c = "c".into();
+    let d = "d".into();
 
     n.observe(&a, &1, 10);
     n.observe(&b, &1, 15);
@@ -154,5 +154,5 @@ fn main() {
 
     let d = n.ucb_scoring(con);
     println!("{d:#?}");
-    n.collect_garbage_after_limit(00);
+    n.collect_garbage_after_limit(12);
 }
