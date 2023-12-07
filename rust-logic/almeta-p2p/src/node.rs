@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use crate::{logy, OfferID, packet::PacketBody};
+use crate::{logy, OfferID, packet::PacketBody, unwrap_or_return};
 
 use super::{LinkID, Command, ICE, DirectPacket, Packet, PeerID, routing_entry::{RoutingCost, RoutingEntry}, Incoming, Outgoing};
 
@@ -103,20 +103,22 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
     */
     pub fn on_answer_generated(&mut self, link_id: &LinkID, answer: Answer) {
         logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, link_id);
-        let Some(outgoing) = self.outgoing.get_mut(link_id) else {
-            logy!("trace", "coundn't find outgoing {link_id}");
-            return
-        };
+        let outgoing = unwrap_or_return!(
+            self.outgoing.get_mut(link_id),
+            logy!("trace", "coundn't find outgoing {link_id}"),
+            ()
+        );
         if outgoing.user {
             self.command_queue.push_back(Command::UserAnswer { link_id: link_id.clone(), answer: answer.clone() });
         }
         outgoing.answer = Some(answer);
     }
     pub fn on_offer_generated(&mut self, link_id: &LinkID, offer: Offer) {
-        let Some(incoming) = self.incoming.get_mut(link_id) else {
-            logy!("tracenode", "incoming {link_id:?} not found");
-            return
-        };
+        let incoming = unwrap_or_return!(
+            self.incoming.get_mut(link_id),
+            logy!("tracenode", "incoming {link_id:?} not found"),
+            ()   
+        );
         if incoming.user {
             logy!("tracenode", " received offer for user on channel {link_id:?}");
             self.command_queue.push_back(Command::UserOffer { link_id: link_id.clone(), offer: offer.clone() });
@@ -126,12 +128,13 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
     pub fn receive_direct(&mut self, link_id: &LinkID, packet: DirectPacket) {
         match packet {
             DirectPacket::DearJohn => {
-                let Some(peer_id) = self.get_peer_id_from_link_id(link_id) else {
-                    return
-                };
+                let peer_id = unwrap_or_return!( self.get_peer_id_from_link_id(link_id));
                 if ! self.is_keeper(&peer_id) {
                     self.send_direct(link_id.clone(), DirectPacket::Goodbye);
                 }
+            },
+            DirectPacket::DistanceIncrease { peer, trace } => {
+                
             },
             DirectPacket::Goodbye => todo!(),
             DirectPacket::Greetings { me, supported_versions } => {
@@ -157,18 +160,14 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 ()
             },
             DirectPacket::RouteTraceFromOriginatorToTarget { target, mut trace } => {
-                let Some(originator) = trace.get(0) else {
-                    return 
-                };
+                let originator = unwrap_or_return!(trace.get(0));
                 if &self.my_id == &target {
                     let target = originator.clone();
                     let packet_body = PacketBody::ReturnRouteTrace(trace);
                     self.send_to(target, packet_body);
                     return
                 }
-                let Some(next_hop) = self.get_next_hop_to(&target) else {
-                    return
-                };
+                let next_hop = unwrap_or_return!(self.get_next_hop_to(&target));
                 trace.push(self.my_id.clone());
                 let new_packet = DirectPacket::RouteTraceFromOriginatorToTarget{
                     target, 
@@ -177,10 +176,11 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 self.send_direct(next_hop, new_packet)
             },
             DirectPacket::RouteTraceToOriginatorFromTarget { originator, mut trace } => {
-                let Some(_target) = trace.get(0) else {
-                    logy!("networkerror", "recieved empty RouteTraceToSourceFromDestination for {originator}, nothin we can do about it");
-                    return
-                };
+                let _target = unwrap_or_return!(
+                    trace.get(0),
+                    logy!("networkerror", "recieved empty RouteTraceToSourceFromDestination for {originator}, nothin we can do about it"),
+                    ()
+                );
                 if &originator == &self.my_id {
                     // this trace was emnt for us so handle it
                     return
@@ -198,9 +198,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     };
                     */
                 } else {
-                    let Some(next_hop) = self.get_next_hop_to(&originator) else {
-                        return
-                    };
+                    let next_hop = unwrap_or_return!(self.get_next_hop_to(&originator));
                     trace.push(self.my_id.clone());
                     let new_packet = DirectPacket::RouteTraceToOriginatorFromTarget{
                         originator, 
@@ -225,7 +223,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             },
         };
     }
-    pub fn receive_packet(&mut self, _link_id: &LinkID, packet: Packet<Answer, Offer>) {
+    pub fn receive_packet(&mut self, link_id: &LinkID, packet: Packet<Answer, Offer>) {
         if packet.destination == self.my_id {
             match packet.body {
                 PacketBody::Answer { answer, offer_id, ice} => {
@@ -249,10 +247,11 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 },
 */
                 PacketBody::NewICE { link_id, ice } => {
-                    let Some(incoming) = self.incoming.get_mut(&link_id) else {
-                        logy!("error", "couldn't find an incoming for {}", link_id);
-                        return
-                    };
+                    let incoming = unwrap_or_return!(
+                        self.incoming.get_mut(&link_id),
+                        logy!("error", "couldn't find an incoming for {}", link_id),
+                        ()
+                    );
                     incoming.ice.push(ice.clone());
                     //self.command_queue.push_back(Command::AddICE { link_id, ice});
                     /*
@@ -263,9 +262,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
 
                 },
                 PacketBody::RequestTraceToMe => {
-                    let Some(next_hop) = self.get_next_hop_to(&packet.source) else {
-                        return
-                    };
+                    let next_hop =  unwrap_or_return!(self.get_next_hop_to(&packet.source));
 
                     let new_packet = DirectPacket::RouteTraceToOriginatorFromTarget{
                         originator: packet.source, 
@@ -276,14 +273,13 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 PacketBody::ReturnRouteTrace(mut trace) => {
                     if Some(&self.my_id) == trace.get(0) {
                         // it was a trace from us to `packet.source`
-                        let Some(first_hop) = trace.get(1) else {
-                            return
-                        };
+                        let first_hop = unwrap_or_return!(trace.get(1));
                         if let Some(next_hop) = self.get_next_hop_to(&packet.source) {
-                            let Some(next_hop_peer_id) = self.get_peer_id_from_link_id(&next_hop) else {
-                                logy!("networkingerror", "if we are routing thou a link then we should be a link to a neighbor");
-                                return;
-                            };
+                            let next_hop_peer_id = unwrap_or_return!(
+                                self.get_peer_id_from_link_id(&next_hop),
+                                logy!("networkingerror", "if we are routing thou a link then we should be a link to a neighbor"),
+                                ()
+                            );
                             if &next_hop_peer_id == first_hop {
                                 // check if we in the trace;
                                 //first remove ourselve from the trace.
@@ -292,11 +288,19 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                                     return
                                 }
                                 self.routing_table.insert(
-                                    packet.source, 
+                                    packet.source.clone(), 
                                     RoutingEntry::new(
                                         next_hop, 
                                         // add one to the cost because the tace does include the ending peer(it can be find from the packet source) and re removed oursef from it
-                                        trace.len() as u32 + 1));
+                                        trace.len() as u32 + 1
+                                    )
+                                );
+                                // put our id back at the begaining and then at the end tha was swap_removeed to the beginig back to the end
+                                let last = std::mem::replace(trace.get_mut(0).unwrap(), self.my_id.clone());
+                                trace.push(last);
+
+                                let packet = DirectPacket::DistanceIncrease{peer: packet.source, trace};
+                                self.direct_broadcast(Some(link_id), packet);
                             }
                         }
                     } else {
@@ -330,10 +334,11 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.command_queue.push_back(Command::SendDirect { link_id, packet });
     }
     pub fn send_packet(&mut self, packet: Packet<Answer, Offer>) {
-        let Some(link_id) = self.get_next_hop_to(&packet.destination) else {
-            logy!("error", "Couldn't find next node to {}", packet.destination);
-            return
-        };
+        let link_id = unwrap_or_return!(
+            self.get_next_hop_to(&packet.destination),
+            logy!("error", "Couldn't find next node to {}", packet.destination),
+            ()
+        );
         self.command_queue.push_back(Command::Send { link_id, packet });
     }
     pub fn send_overriding_routing(&mut self, link_id: &LinkID, destination: PeerID, packet_body: PacketBody<Answer, Offer>) {
@@ -341,10 +346,11 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.command_queue.push_back(Command::Send { link_id: link_id.clone(), packet });
     }
     pub fn send_to(&mut self, destination: PeerID, packet_body: PacketBody<Answer, Offer>) {
-        let Some(link_id) = self.get_next_hop_to(&destination) else {
-            logy!("error", "Couldn't find next node to {}", destination);
-            return
-        };
+        let link_id = unwrap_or_return!(
+            self.get_next_hop_to(&destination),
+            logy!("error", "Couldn't find next node to {}", destination),
+            ()
+        );
         let packet = Packet { source:self.my_id.clone(), destination, body: packet_body };
         self.command_queue.push_back(Command::Send { link_id, packet });
     }

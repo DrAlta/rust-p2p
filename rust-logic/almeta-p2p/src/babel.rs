@@ -1,3 +1,4 @@
+//! the Unrouting Algoithum. Instead of finding the best path for reaching a node we find the woost path for advoiding node.
 //! * bellman-ford but if you loose the link you where routing to S then you completely foret about S and broadcast to all your neaghbors that you no loger know how to get to S
 //! * when your receive an anouncemt that someone nolonger knows how to get to S you check if you where routing to S though that link
 //! ** if you wwre outing though that link you re broadcast to all your neighbors that the route to S is down

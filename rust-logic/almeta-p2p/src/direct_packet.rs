@@ -8,6 +8,7 @@ use super::PeerID;
 #[serde(tag = "Body")]
 pub enum DirectPacket {
     DearJohn,
+    DistanceIncrease{peer: PeerID, trace: Vec<PeerID>},
     Goodbye,
     Greetings{
         #[serde(rename = "Me")]
