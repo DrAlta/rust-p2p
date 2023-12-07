@@ -18,6 +18,7 @@ pub enum DirectPacket {
     },
     InvalidPacket,
     InvalidSalutation,
+    LostRouteTo(PeerID),
     Me{
         #[serde(rename = "Me")]
         me: PeerID,

@@ -133,7 +133,20 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     self.send_direct(link_id.clone(), DirectPacket::Goodbye);
                 }
             },
-            DirectPacket::DistanceIncrease { peer, trace } => {
+            DirectPacket::DistanceIncrease { peer, mut trace } => {
+                let next_hop = unwrap_or_return!(self.get_next_hop_to(&peer));
+                if link_id == &next_hop {
+                    // check if we in the trace;
+                    if trace.contains(&self.my_id) {
+                        let packet= DirectPacket::LostRouteTo(peer);
+                        self.direct_broadcast(None, packet);
+                        return
+                    }
+                    trace.push(self.my_id.clone());
+                    self.routing_table.insert(peer.clone(), RoutingEntry::new(next_hop, trace.len() as u32));
+                    let packet= DirectPacket::DistanceIncrease { peer, trace};
+                    self.direct_broadcast(Some(link_id), packet);
+                }
                 
             },
             DirectPacket::Goodbye => todo!(),
@@ -152,6 +165,22 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             },
             DirectPacket::InvalidPacket => todo!(),
             DirectPacket::InvalidSalutation => todo!(),
+            DirectPacket::LostRouteTo(peer) => {
+                let RoutingEntry { next_hop, routing_cost } = unwrap_or_return!(self.routing_table.get(&peer));
+                if next_hop == link_id {
+                    let packet= DirectPacket::LostRouteTo(peer);
+                    self.direct_broadcast(None, packet);
+                } else {
+                    let packet = DirectPacket::RoutingInformationExchange(
+                        Vec::from(
+                            [
+                                (peer, routing_cost.clone())
+                            ]
+                        )
+                    );
+                    self.send_direct(link_id.clone(), packet);
+                }
+            },
             DirectPacket::Me { .. } => {
 
             },
@@ -285,6 +314,14 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                                 //first remove ourselve from the trace.
                                 trace.swap_remove(0);
                                 if trace.contains(&self.my_id) {
+                                    // it was a trace from us, and
+                                    // it went throu node that I current route to the target and
+                                    // it goes through me
+                                    // therefore
+                                    // clear are routing to target and announce it
+                                    self.routing_table.remove_entry(&packet.source);
+                                    let packet= DirectPacket::LostRouteTo(packet.source.clone());
+                                    self.direct_broadcast(None, packet);
                                     return
                                 }
                                 self.routing_table.insert(
