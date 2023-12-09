@@ -1,4 +1,4 @@
-use almeta_p2p::LinkID;
+type LinkID = i32;
 use almeta_p2p::ICE;
 use godot::prelude::*;
 use godot::engine::RefCounted;
@@ -35,26 +35,26 @@ impl IRefCounted for RustLogic {
 impl RustLogic {
     #[func]
     pub fn channel_closed(&mut self, link_id: LinkID) {
-        self.node.channel_closed(&link_id)
+        self.node.channel_closed(&link_id.into())
     }
     #[func]
     fn channel_established(&mut self, link_id: LinkID) {
-        self.node.channel_established(&link_id)
+        self.node.channel_established(&link_id.into())
     }
     #[func]
     fn generate_offer(&mut self) -> LinkID {
-        self.node.generate_offer(true)
+        self.node.generate_offer(None).0.to_inner()
     }
     #[func]
     fn get_answer_json_by_id(&self, offer_id: LinkID) -> String {
-        let Some(thing) = self.node.get_answer_json_by_id(&offer_id) else {
+        let Some(thing) = self.node.get_answer_json_by_id(&offer_id.into()) else {
             return "".into()
         };
         thing
     }
     #[func]
     fn get_offer_json_by_id(&self, offer_id: LinkID) -> String {
-        let Some(thing) = self.node.get_offer_json_by_id(&offer_id) else {
+        let Some(thing) = self.node.get_offer_json_by_id(&offer_id.into()) else {
             return "".into()
         };
         thing
@@ -65,17 +65,17 @@ impl RustLogic {
 
     #[func]
     fn on_answer_generated(&mut self, link_id: LinkID, answer: Answer) {
-        self.node.on_answer_generated(&link_id, answer)
+        self.node.on_answer_generated(&link_id.into(), answer)
     }
     #[func]
     fn on_offer_generated(&mut self, link_id: LinkID, offer: String) {
-        self.node.on_offer_generated(&link_id, offer)
+        self.node.on_offer_generated(&link_id.into(), offer)
     }
 
     #[func]
     fn on_new_ice_candidate(&mut self, link_id: LinkID, media: String, index: i64, sdp: String) {
         let ice = ICE::new(media, index, sdp);
-        self.node.add_ice(&link_id, ice);
+        self.node.add_ice(&link_id.into(), ice);
     }
 
 
@@ -93,47 +93,47 @@ impl RustLogic {
         match command {
             almeta_p2p::Command::AddICE { link_id, ice } => {
                 dict.insert("Command", "AddICE");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Index",ice.index);
                 dict.insert("Media",ice.media);
                 dict.insert("Name",ice.name);
             },
             almeta_p2p::Command::AnswerOffer { link_id, answer } => {
                 dict.insert("Command", "AnswerOffer");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Answer", answer);
 
             },
             almeta_p2p::Command::GenerateAnswer { link_id, offer } => {
                 dict.insert("Command", "GenerateAnswer");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Offer", offer);
             },
             almeta_p2p::Command::GenerateOffer(link_id) => {
                 dict.insert("Command", "GenerateOffer");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
 
             },
             almeta_p2p::Command::Send { link_id, packet } => {
                 dict.insert("Command", "Send");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Packet", serde_json::to_string(&packet).unwrap());
 
             },
             almeta_p2p::Command::SendDirect { link_id, packet } => {
                 dict.insert("Command", "SendDirect");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Packet", serde_json::to_string(&packet).unwrap());
             },
             almeta_p2p::Command::UserAnswer { link_id, answer } => {
                 dict.insert("Command", "UserAnswer");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Answer", answer);
 
             },
             almeta_p2p::Command::UserOffer { link_id, offer } => {
                 dict.insert("Command", "UserOffer");
-                dict.insert("LinkID", link_id);
+                dict.insert("LinkID", link_id.to_inner());
                 dict.insert("Offer", offer);
             },
         }
@@ -144,13 +144,13 @@ impl RustLogic {
     #[func]
     fn receive_packet(&mut self, link_id: LinkID, json_packet: String) {
         if let Ok(packet) = serde_json::from_str::<Packet::<Answer, Offer>>(&json_packet) {
-            self.node.receive_packet(&link_id, packet)
+            self.node.receive_packet(&link_id.into(), packet)
         } else if let Ok(packet) = serde_json::from_str::<DirectPacket>(&json_packet) {
-            self.node.receive_direct(&link_id, packet)
+            self.node.receive_direct(&link_id.into(), packet)
         } else {
             self.node.command_queue.push_back(
                 almeta_p2p::Command::SendDirect { 
-                    link_id, 
+                    link_id: link_id.into(), 
                     packet: DirectPacket::InvalidPacket
                 }
             )

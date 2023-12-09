@@ -1,6 +1,7 @@
 
 mod aux;
-use aux::{Incoming, Outgoing};
+use aux::{Incoming, OfferID, Outgoing};
+pub use aux::LinkID;
 mod command;
 pub use command::Command;
 pub mod direct_packet;
@@ -18,8 +19,3 @@ pub mod scoring;
 mod user_json;
 pub use user_json::UserJSON;
 pub mod macros;
-
-pub type LinkID = i8;
-pub type OfferID = i8;
-
-

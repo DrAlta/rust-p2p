@@ -61,6 +61,7 @@ pub enum PacketBody<Answer, Offer> {
         #[serde(rename = "ICE")]
         ice: ICE,
     },
+    RequestOffer,
     RequestTraceToMe,
     ReturnRouteTrace(Vec<PeerID>),
  //   WhoAreYourNeighbors,
@@ -72,7 +73,7 @@ pub enum PacketBody<Answer, Offer> {
 }
 
 pub fn main(){
-    let inner = PacketBody::<String, String>::Answer { answer: "spam".into(), offer_id: 69, ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
+    let inner = PacketBody::<String, String>::Answer { answer: "spam".into(), offer_id: 69.into(), ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
     //let outer = Outer::Answer(inner);
     let packet = Packet{source: "Source".into(), destination: "Destination".into(),body: inner};
     println!("\n{}\n", serde_json::to_string(&packet).unwrap());

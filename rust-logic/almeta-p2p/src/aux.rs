@@ -1,5 +1,9 @@
+use std::{convert::From, fmt};
 
-use crate::OfferID;
+
+use serde::{Deserialize, Serialize};
+
+use crate::PeerID;
 
 use super::ICE;
 
@@ -18,13 +22,65 @@ impl<Answer> Outgoing<Answer>{
 }
 #[derive(Debug)]
 pub struct Incoming<Offer> {
-    pub user: bool,
+    pub for_peer: Option<PeerID>,
     pub offer: Option<Offer>,
     pub ice: Vec<ICE>,
 }
 
 impl<Offer> Incoming<Offer>{
-    pub fn new(offer: Option<Offer>, ice: Vec<ICE>, user: bool) -> Self {
-        Self { offer, ice, user}
+    pub fn new(offer: Option<Offer>, ice: Vec<ICE>, for_peer: Option<PeerID>) -> Self {
+        Self { offer, ice, for_peer}
+    }
+}
+
+type InnerID = i32;
+#[derive(Debug, Clone,Deserialize,Serialize,Hash,PartialEq, Eq, PartialOrd, Ord)]
+pub struct OfferID(InnerID);
+
+impl From<i32> for OfferID {
+    fn from(item: i32) -> Self {
+        OfferID(item)
+    }
+}
+/*impl From<LinkID> for OfferID {
+    fn from(item: LinkID) -> Self {
+        OfferID(item.to_inner())
+    }
+}
+impl From<&LinkID> for OfferID {
+    fn from(item: &LinkID) -> Self {
+        OfferID(item.to_inner())
+    }
+}
+*/
+impl OfferID {
+    pub fn to_inner(&self) -> InnerID {
+        self.0
+    }
+}
+
+
+#[derive(Debug, Clone,Deserialize,Serialize,Hash,PartialEq, Eq, PartialOrd, Ord)]
+pub struct LinkID(InnerID);
+impl fmt::Display for LinkID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl From<i32> for LinkID {
+    fn from(item: i32) -> Self {
+        LinkID(item)
+    }
+}
+/*
+impl From<OfferID> for LinkID {
+    fn from(item: OfferID) -> Self {
+        LinkID(item.to_inner())
+    }
+}
+*/
+impl LinkID {
+    pub fn to_inner(&self) -> InnerID {
+        self.0
     }
 }

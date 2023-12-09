@@ -15,9 +15,9 @@ pub struct Node<Answer, Offer> {
 
     routing_table: HashMap<PeerID, RoutingEntry>,
     
-    link_id_generator_state: i8,
+    link_id_generator_state: i32,
 
-    incoming: HashMap<LinkID, Incoming<Offer>>,
+    incoming: HashMap<OfferID, Incoming<Offer>>,
     outgoing: HashMap<LinkID, Outgoing<Answer>>,
 }
 
@@ -28,8 +28,8 @@ impl<Answer, Offer> Node<Answer, Offer> {
         Self {
             command_queue: VecDeque::new(), 
             my_id, 
-            neighbors: HashMap::from([("User".into(), 0)]),
-            routing_table: HashMap::from([("User".into(), RoutingEntry::new(0,0))]),
+            neighbors: HashMap::from([("User".into(), 0.into())]),
+            routing_table: HashMap::from([("User".into(), RoutingEntry::new(0.into(),0))]),
             link_id_generator_state: 0, 
             incoming: HashMap::new(),
             outgoing: HashMap::new(),
@@ -48,11 +48,11 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
     */
     pub fn channel_closed(&mut self, link_id: &LinkID) {
         self.neighbors.retain(|_peer_id, test_link_id| test_link_id != link_id);
-        self.incoming.remove(link_id);
+        self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
     }
     pub fn channel_established(&mut self, link_id: &LinkID) {
-        self.incoming.remove(link_id);
+        self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
   
         self.send_direct(link_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), supported_versions: Vec::from([PROTOCAL_VERSION.into()]) })
@@ -72,12 +72,12 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         };
         serde_json::to_string(&user).ok()
     }
-    pub fn get_offer_json_by_id(&self, link_id: &LinkID) -> Option<String> {
-        let incoming = self.incoming.get(link_id)?;
+    pub fn get_offer_json_by_id(&self, offer_id: &OfferID) -> Option<String> {
+        let incoming = self.incoming.get(offer_id)?;
         let offer = incoming.offer.clone()?;
         let inner = PacketBody::<Answer, Offer>::Offer { 
             offer: offer, 
-            offer_id: link_id.clone(),
+            offer_id: offer_id.clone(),
             ice: incoming.ice.clone()
         };
         let user = Packet{
@@ -87,12 +87,13 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         };
         serde_json::to_string(&user).ok()
     }
-    pub fn generate_offer(&mut self, user: bool) -> LinkID {
+    pub fn generate_offer(&mut self, for_peer: Option<PeerID>) -> (LinkID, OfferID) {
         self.link_id_generator_state += 1;
         let link_id: LinkID = self.link_id_generator_state.into();
-        self.incoming.insert(link_id.clone(), Incoming::new(None, Vec::new(), user));
+        let offer_id: OfferID = self.link_id_generator_state.into();
+        self.incoming.insert(offer_id.clone(), Incoming::new(None, Vec::new(), for_peer));
         self.command_queue.push_back(Command::GenerateOffer(link_id.clone()));
-        link_id
+        (link_id, offer_id)
     }
     /*
     pub fn generate_offer(&mut self) -> LinkID{
@@ -113,17 +114,23 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         }
         outgoing.answer = Some(answer);
     }
+    // this should take a link_id on the other side of the binding is only aware on links and not the interstuff like Offers
     pub fn on_offer_generated(&mut self, link_id: &LinkID, offer: Offer) {
+        let offer_id = self.link_id_to_offer_id(link_id);
         let incoming = unwrap_or_return!(
-            self.incoming.get_mut(link_id),
+            self.incoming.get_mut(&offer_id),
             logy!("tracenode", "incoming {link_id:?} not found"),
             ()   
         );
-        if incoming.user {
+        incoming.offer = Some(offer.clone());
+        if let Some(peer_id) = incoming.for_peer.clone() {
+            logy!("tracenode", " received offer for {peer_id:?} on channel {link_id:?}");
+            let packet_body = PacketBody::Offer { offer, offer_id, ice: incoming.ice.clone()};
+            self.send_to(peer_id.clone(), packet_body);
+        } else {
             logy!("tracenode", " received offer for user on channel {link_id:?}");
             self.command_queue.push_back(Command::UserOffer { link_id: link_id.clone(), offer: offer.clone() });
         }
-        incoming.offer = Some(offer)
     }
     pub fn receive_direct(&mut self, link_id: &LinkID, packet: DirectPacket) {
         match packet {
@@ -256,9 +263,10 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         if packet.destination == self.my_id {
             match packet.body {
                 PacketBody::Answer { answer, offer_id, ice} => {
-                    self.command_queue.push_back(Command::AnswerOffer { link_id: offer_id, answer });
+                    let answer_link_id = self.offer_id_to_link_id(&offer_id);
+                    self.command_queue.push_back(Command::AnswerOffer { link_id: answer_link_id.clone(), answer });
                     for icee in ice {
-                        self.command_queue.push_back(Command::AddICE { link_id: offer_id.clone(), ice: icee});
+                        self.command_queue.push_back(Command::AddICE { link_id: answer_link_id.clone(), ice: icee});
                     };
                 },
                 PacketBody::Goodbye => todo!(),
@@ -277,7 +285,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
 */
                 PacketBody::NewICE { link_id, ice } => {
                     let incoming = unwrap_or_return!(
-                        self.incoming.get_mut(&link_id),
+                        self.incoming.get_mut(&self.link_id_to_offer_id(&link_id)),
                         logy!("error", "couldn't find an incoming for {}", link_id),
                         ()
                     );
@@ -289,6 +297,9 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     }
                     */
 
+                },
+                PacketBody::RequestOffer => {
+                    self.generate_offer(Some(packet.source));
                 },
                 PacketBody::RequestTraceToMe => {
                     let next_hop =  unwrap_or_return!(self.get_next_hop_to(&packet.source));
@@ -392,7 +403,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.command_queue.push_back(Command::Send { link_id, packet });
     }
     pub fn add_ice(&mut self, link_id: &LinkID, ice: ICE) {
-        if let Some(incoming) = self.incoming.get_mut(link_id) {
+        if let Some(incoming) = self.incoming.get_mut(&self.link_id_to_offer_id(link_id)) {
             incoming.ice.push(ice);
         } else if let Some(outgoing) = self.outgoing.get_mut(link_id) {
             outgoing.ice.push(ice);
@@ -404,7 +415,7 @@ impl<Answer, Offer> Node<Answer, Offer> {
     pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> LinkID {
         self.link_id_generator_state += 1;
         let link_id: LinkID = self.link_id_generator_state.into();
-        self.outgoing.insert(link_id, Outgoing::new(offer_id, None, Vec::new(), user));
+        self.outgoing.insert(link_id.clone(), Outgoing::new(offer_id, None, Vec::new(), user));
         self.command_queue.push_back(Command::GenerateAnswer{link_id: link_id.clone(), offer});
         link_id
     }
@@ -463,5 +474,14 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize>  Node<An
             self.command_queue.push_back(Command::SendDirect { link_id: neighbor_link.clone(), packet: packet.clone() });
         }
 
+    }
+}
+
+impl<Answer, Offer> Node<Answer, Offer> {
+    fn link_id_to_offer_id(&self, link_id: &LinkID) -> OfferID {
+        link_id.to_inner().into()
+    }
+    fn offer_id_to_link_id(&self, offer_id: &OfferID) -> LinkID {
+        offer_id.to_inner().into()
     }
 }
