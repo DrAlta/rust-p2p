@@ -1,22 +1,23 @@
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 use super::PeerID;
 
 type Observation = i64;
 type PacketID = usize;
 
-struct NeighborInfo {
+
+
+
+
+#[derive(Debug, Clone,Deserialize,Serialize)]
+pub struct Perigee {
     count_and_first_observed: HashMap<PacketID, (i8, Observation)>,
     observations: HashMap<PeerID, HashMap<PacketID, Observation>>,
+    keepers: HashMap<PeerID, f64>,
 }
 
-impl NeighborInfo {
-    fn new() -> Self {
-        Self {
-            count_and_first_observed: HashMap::new(),
-            observations: HashMap::new(),
-        }
-    }
+impl Perigee {
     fn collect_garbage_after_limit(&mut self, mut limit: Observation) {
         for (_, observations_map) in &mut self.observations {
             observations_map.retain(|_packet_id, observation| observation >= &mut limit);
@@ -72,31 +73,6 @@ impl NeighborInfo {
             self.observations.insert(peer_id.clone(), HashMap::from([(packet_id.clone(), observation)]));
         }
     }
-    fn ucb_scoring(&self, c: f64) -> Option<PeerID> {
-        let mut to_disconnect: Option<PeerID> = None;
-        let mut max_lcb = f64::NEG_INFINITY;
-        let mut min_ucb = f64::INFINITY;
-
-        for (neighbor_id, observations_map) in &self.observations {
-            let observations = collect_observations(observations_map, &self.count_and_first_observed);
-            let [ucb, lcb] = calculate_cb(&observations, c);
-           
-            if lcb > max_lcb {
-                max_lcb = lcb;
-                to_disconnect = Some(neighbor_id.clone());
-            }
-
-            if ucb < min_ucb {
-                min_ucb = ucb;
-            }
-        }
-
-        if max_lcb > min_ucb {
-           return to_disconnect
-        } else {
-            return None
-        }
-    }
 
 }
 //////////////////////////////////////////////////////////
@@ -130,11 +106,52 @@ fn collect_observations(observations_map: &HashMap<PacketID, Observation>, count
     }
     observations
 }
+
+/// public interface
+impl Perigee {
+    pub fn new() -> Self {
+        Self {
+            count_and_first_observed: HashMap::new(),
+            observations: HashMap::new(),
+            keepers: HashMap::new(),
+        }
+    }
+    pub fn is_keeper(&self, peer_id: &PeerID) -> bool {
+        self.keepers.contains_key(peer_id)
+    }
+    pub fn perigee(&mut self, c: f64)  {
+            let mut new_keepers = HashMap::new();
+            let mut max_lcb = f64::NEG_INFINITY;
+            let mut min_ucb = f64::INFINITY;
+    
+            for (neighbor_id, observations_map) in &self.observations {
+                let observations = collect_observations(observations_map, &self.count_and_first_observed);
+                let [ucb, lcb] = calculate_cb(&observations, c);
+               
+                if lcb > max_lcb {
+                    max_lcb = lcb;
+                } else {
+                    new_keepers.insert(
+                        neighbor_id.clone(), 
+                        (lcb + ucb) / 2.0
+                    );
+                }
+    
+                if ucb < min_ucb {
+                    min_ucb = ucb;
+                }
+            }
+    
+            if max_lcb > min_ucb {
+               let _= std::mem::replace(&mut self.keepers, new_keepers);
+            }
+        }
+    }
 //////////////////////////////////////////////////////////
 #[allow(dead_code)]
 fn main() {
     let con = 0.5;
-    let mut n = NeighborInfo::new();
+    let mut n = Perigee::new();
     let a = "a".into();
     let b = "b".into();
     let c = "c".into();
@@ -152,7 +169,7 @@ fn main() {
     n.observe(&a, &3, 10);
     n.observe(&b, &3, 15);
 
-    let d = n.ucb_scoring(con);
-    println!("{d:#?}");
+    n.perigee(con);
+    println!("{:#?}", n.keepers);
     n.collect_garbage_after_limit(12);
 }

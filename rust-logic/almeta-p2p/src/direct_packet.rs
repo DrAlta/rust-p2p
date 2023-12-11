@@ -5,7 +5,7 @@ use crate::routing_entry::RoutingCost;
 use super::PeerID;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "Body")]
+//#[serde(tag = "Body")]
 pub enum DirectPacket {
     DearJohn,
     DistanceIncrease{peer: PeerID, trace: Vec<PeerID>},

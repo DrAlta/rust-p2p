@@ -1,3 +1,5 @@
+//! cb = confendence bound 
+//! 
 use std::collections::HashMap;
 
 use super::PeerID;
@@ -52,6 +54,11 @@ impl NeighborInfo {
         }
         self.first_observed.retain(|packet_id, _observation| keep.contains(packet_id));
     }
+
+
+}
+/// Public
+impl NeighborInfo {
     pub fn observe(&mut self, peer_id: &PeerID, packet_id: &PacketID, observation: Observation ) {
         if let Some(previous_observation) = self.first_observed.get(packet_id) {
             if &observation < previous_observation {
@@ -64,7 +71,8 @@ impl NeighborInfo {
             self.observations.insert(peer_id.clone(), HashMap::from([(packet_id.clone(), observation)]));
         }
     }
-    fn ucb_scoring(&self, c: f64) -> Option<PeerID> {
+    /// returns a Option of the peers to disconnect
+    pub fn who_to_purge(&self, c: f64) -> Option<PeerID> {
         let mut to_disconnect: Option<PeerID> = None;
         let mut max_lcb = f64::NEG_INFINITY;
         let mut min_ucb = f64::INFINITY;
@@ -89,8 +97,8 @@ impl NeighborInfo {
             return None
         }
     }
-
 }
+
 //////////////////////////////////////////////////////////
 fn calculate_cb<O: Clone + PartialOrd + std::ops::Add<f64, Output = O> + std::ops::Sub<f64, Output = O>>(observations: &Vec<O>, c: f64) -> [O; 2] {
     let percentile_90 = percentile(observations, 0.9);
