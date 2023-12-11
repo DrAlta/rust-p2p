@@ -4,8 +4,7 @@ use std::{collections::{HashMap, VecDeque}, cell::RefCell};
 use almeta_p2p::{Command, Packet, Node, DirectPacket, LinkID};
 type OfferID = i32;
 
-pub type Offer = String;
-pub type Answer = Link;
+//pub type Offer = String;
 
 
 #[derive(Debug)]
@@ -15,13 +14,37 @@ enum Message<Answer, Offer> {
 }
 
 #[derive(Debug,Clone, Serialize, Deserialize)]
-pub struct Link {
+pub struct Connection {
     pub peer_idx: usize,
     pub link_id: LinkID,
 }
-impl Link {
+impl Connection {
     pub fn new(peer_idx: usize, link_id: LinkID) -> Self {
         Self {peer_idx, link_id}
+    }
+}
+#[derive(Debug,Clone, Serialize, Deserialize)]
+pub struct Answer {
+    pub offering_peer_idx: usize,
+    pub offering_link_id: LinkID,
+    pub answering_peer_idx: usize,
+    pub answering_link_id: LinkID,
+}
+impl Answer {
+    pub fn new(offering_peer_idx: usize, offering_link_id: LinkID, answering_peer_idx: usize, answering_link_id: LinkID) -> Self {
+        Self {offering_link_id, offering_peer_idx, answering_link_id,answering_peer_idx}
+    }
+}
+
+
+#[derive(Debug,Clone, Serialize, Deserialize)]
+pub struct Offer {
+    pub offering_peer_idx: usize,
+    pub offering_link_id: LinkID,
+}
+impl Offer {
+    pub fn new(offering_peer_idx: usize, offering_link_id: LinkID) -> Self {
+        Self {offering_link_id, offering_peer_idx}
     }
 }
 
@@ -36,7 +59,7 @@ pub fn main() {
         RefCell::new(Node::new("PeerB".into())),
         RefCell::new(Node::new("PeerC".into())),
     ];
-    let mut peers_channel_to_link: [HashMap<LinkID, Link>; NUMBER_OF_PEERS] = [
+    let mut peers_channel_to_link: [HashMap<LinkID, Connection>; NUMBER_OF_PEERS] = [
         HashMap::new(),
         HashMap::new(),
         HashMap::new(),
@@ -44,7 +67,7 @@ pub fn main() {
     let mut link_id_gen_state = [0_i8;NUMBER_OF_PEERS];
     assert_eq!(peers.len(), link_id_gen_state.len());
 
-    let mut incoming_connections = HashMap::<String, Link>::new();
+   // let mut incoming_connections = HashMap::<String, Connection>::new();
 
     let mut user_offers_to_be_routed = Vec::<(usize, Offer, OfferID)>::new();
 
@@ -63,7 +86,7 @@ pub fn main() {
 
             let mut peer = peer_refcell.borrow_mut();
 
-            // logy!("trace", "processing {} commands of peer:{} at {}", peer.command_queue.len(), peer.my_id, peer_idx);
+            logy!("trace", "processing {} commands of peer:{}", peer.command_queue.len(), peer_idx);
 
             let mut command_queue = VecDeque::new();
             std::mem::swap(&mut peer.command_queue, &mut command_queue);
@@ -72,39 +95,34 @@ pub fn main() {
             .fold(message_queue, 
                 |mut x, command| {
                     continue_ka = true;
-                    println!("Peer {peer_idx} Command: {command:?}");
+                    println!("Peer {peer_idx} Command: {command}");
                     match command {
                         Command::AddICE { .. } => todo!(),
-                        Command::AnswerOffer { link_id, answer } => {
+                        Command::AnswerOffer { link_id: _ , answer } => {
                             /*
                             we should add the peer from the answer into peers_channel_to_link[peer_id].insert(link_id, Link::new(answering_peer, answering_peers_link_id))
                             but we took care of that when generating the answer
                             */
-                            peer.channel_established(&link_id);
                             answered_queue.push(answer)
                             
                             
                         },
                         Command::GenerateAnswer { link_id, offer } => {
-                            let Some(incoming_link) = incoming_connections.remove(&offer) else {
-                                logy!("trace", "failed to find {offer:?}");
-                                return x;
-                            };
-                            println!("link_id:{link_id}, Link:{incoming_link:?}");
-
-                            peer.on_answer_generated(&incoming_link.link_id, Link::new(peer_idx, link_id.clone()));
-                            peers_channel_to_link[incoming_link.peer_idx].insert(incoming_link.link_id.clone(), Link::new(peer_idx, link_id.clone()));
-                            peers_channel_to_link[peer_idx].insert(link_id, incoming_link);
+                         
+                            peers_channel_to_link[offer.offering_peer_idx].insert(offer.offering_link_id.clone(), Connection { peer_idx: peer_idx.clone(), link_id: link_id.clone()});
+                            peers_channel_to_link[peer_idx.clone()].insert(link_id.clone(), Connection { peer_idx: offer.offering_peer_idx, link_id: offer.offering_link_id.clone()});
+                            let answer = Answer::new(offer.offering_peer_idx, offer.offering_link_id, peer_idx.clone(), link_id.clone());
+                            peer.on_answer_generated(&link_id, answer);
                         },
                         Command::GenerateOffer(link_id) => {
                             println!("incrementing peer{peer_idx}'s link gen");
                             link_id_gen_state[peer_idx] += 1;
                             //let link_id: LinkID = link_id_gen_state[peer_idx].into();
-                            let link_string = format!("P{}:C{}", peer_idx, link_id_gen_state[peer_idx]);
-                            let new_link= Link::new(peer_idx, link_id.clone());
-                            incoming_connections.insert(link_string.clone(), new_link);
+                            let new_offer= Offer::new(peer_idx.clone(), link_id.clone());
+                            //let new_link= Connection::new(peer_idx.clone(), link_id.clone());
+                            //incoming_connections.insert(format!("{new_offer:?}"), new_link);
 
-                            peer.on_offer_generated(&link_id, link_string);
+                            peer.on_offer_generated(&link_id, new_offer);
 
                         },
                         Command::Send { link_id, packet } => {x.push((
@@ -114,15 +132,15 @@ pub fn main() {
                         Command::SendDirect { link_id, packet } => x.push((
                             {
                                 let x = &peers_channel_to_link[peer_idx];
-                                println!("{x:#?}");
+                                //println!("{x:#?}");
                                 x[&link_id].clone()
                             },
                             Message::DirectPacket(packet)
                         )),
-                        Command::UserAnswer { link_id, answer } => {
+                        Command::UserAnswer { link_id: _, answer } => {
                             let prev_peer_idx = (NUMBER_OF_PEERS + peer_idx - 1) % NUMBER_OF_PEERS;
                             println!("send answer to peer {prev_peer_idx}");
-                            peers[prev_peer_idx].borrow_mut().receive_answer(link_id, answer);
+                            peers[prev_peer_idx].borrow_mut().receive_answer(answer.offering_link_id.clone(), answer);
 
 
                         },
@@ -136,10 +154,13 @@ pub fn main() {
                 }
             );
         }
-        for Link { peer_idx, link_id } in answered_queue {
-            continue_ka = true;
-            println!("notifing peer at {peer_idx} of outgoing channel establishment");
-            peers[peer_idx].borrow_mut().channel_established(&link_id);
+//      for Link { peer_idx, link_id } in answered_queue {
+        for Answer { offering_peer_idx, offering_link_id, answering_peer_idx, answering_link_id} in answered_queue {
+                continue_ka = true;
+            println!("notifing peer at {offering_link_id} of incoming channel establishment");
+            peers[offering_peer_idx].borrow_mut().channel_established(&offering_link_id);
+            println!("notifing peer at {answering_link_id} of outgoing channel establishment");
+            peers[answering_peer_idx].borrow_mut().channel_established(&answering_link_id);
         }
         answered_queue = Vec::new();
         for (peer_idx, offer, offer_id) in user_offers_to_be_routed {
@@ -149,7 +170,7 @@ pub fn main() {
             peer.receive_offer(offer, offer_id.into(), true);
         }
         user_offers_to_be_routed = Vec::new();
-        for (Link{peer_idx, link_id}, message) in message_queue {
+        for (Connection{peer_idx, link_id}, message) in message_queue {
             continue_ka = true;
             println!("Peer {peer_idx} Message: {:?}", message);
             match message {
@@ -163,7 +184,7 @@ pub fn main() {
         }
     }
 
-    for (idx, x) in peers_channel_to_link.into_iter().enumerate() {
-        println!("Peer {idx}: {x:?}");
+    for (idx, x) in peers.into_iter().enumerate() {
+        println!("Peer {idx}: {:?}", x.borrow().get_neighbors());
     }
 }

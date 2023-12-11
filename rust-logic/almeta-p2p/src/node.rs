@@ -6,6 +6,18 @@ use super::{LinkID, Command, ICE, DirectPacket, Packet, PeerID, routing_entry::{
 const PROTOCAL_VERSION: &str = concat!("Rust", ":", "0.1");
 
 #[derive(Debug)]
+struct LinkInfo {
+    pub protocal_in: Option<String>,
+    pub protocal_out: Option<String>,
+    pub post_init_greeting: bool,
+}
+
+impl LinkInfo{
+    pub fn new() -> Self {
+        Self { protocal_in: None, protocal_out: None, post_init_greeting: false }
+    }
+}
+#[derive(Debug)]
 pub struct Node<Answer, Offer> {
     pub command_queue: VecDeque<Command<Answer, Offer>>,
 
@@ -19,6 +31,8 @@ pub struct Node<Answer, Offer> {
 
     incoming: HashMap<OfferID, Incoming<Offer>>,
     outgoing: HashMap<LinkID, Outgoing<Answer>>,
+
+    link_info: HashMap<LinkID, LinkInfo>,
 }
 
 /// Creation
@@ -28,16 +42,17 @@ impl<Answer, Offer> Node<Answer, Offer> {
         Self {
             command_queue: VecDeque::new(), 
             my_id, 
-            neighbors: HashMap::from([("User".into(), 0.into())]),
-            routing_table: HashMap::from([("User".into(), RoutingEntry::new(0.into(),0))]),
+            neighbors: HashMap::new(),
+            routing_table: HashMap::new(),
             link_id_generator_state: 0, 
             incoming: HashMap::new(),
             outgoing: HashMap::new(),
+            link_info: HashMap::new(),
         }
     }
 }
 
-impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Answer, Offer> {
+impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::Serialize> Node<Answer, Offer> {
     /*
     pub fn generate_offer(&mut self) -> LinkID {
         self.link_id_generator_state += 1;
@@ -50,10 +65,14 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         self.neighbors.retain(|_peer_id, test_link_id| test_link_id != link_id);
         self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
+        self.link_info.remove(link_id);
     }
     pub fn channel_established(&mut self, link_id: &LinkID) {
+        println!("[node:71] connection established on link:{link_id}");
         self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
+
+        self.link_info.insert(link_id.clone(), LinkInfo::new());
   
         self.send_direct(link_id.clone(), DirectPacket::Greetings { me: self.my_id.clone(), supported_versions: Vec::from([PROTOCAL_VERSION.into()]) })
     }
@@ -71,6 +90,9 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             body: inner
         };
         serde_json::to_string(&user).ok()
+    }
+    pub fn get_neighbors(&self) -> Vec<PeerID> {
+        self.neighbors.keys().map(|x| x.clone()).collect()
     }
     pub fn get_offer_json_by_id(&self, offer_id: &OfferID) -> Option<String> {
         let incoming = self.incoming.get(offer_id)?;
@@ -132,7 +154,42 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             self.command_queue.push_back(Command::UserOffer { link_id: link_id.clone(), offer: offer.clone() });
         }
     }
+    pub fn receive_answer(&mut self, link_id: LinkID, answer: Answer) {
+        logy!("trace", "{:?} received answer", self.my_id);
+        self.command_queue.push_back(Command::AnswerOffer { link_id, answer });
+    }
     pub fn receive_direct(&mut self, link_id: &LinkID, packet: DirectPacket) {
+        if let Some(link_info) = self.link_info.get(link_id) {
+            match link_info.protocal_in {
+                Some(_) => {
+                    self.receive_direct_rust0_1(link_id, packet);
+                },
+                None =>{
+                    self.receive_direct_rust0_1(link_id, packet);
+                }
+            }
+        } else {
+            println!("[node:171]couldn't find link_info for {link_id}");
+        }
+
+        if let Some(link_info) = self.link_info.get_mut(link_id) {
+            match (&link_info.protocal_out, &link_info.post_init_greeting) {
+                (Some(_), false) => {
+                    logy!("debug", "should be sending post greating");
+                    link_info.post_init_greeting = true;
+                    self.post_greeting(link_id);    
+                },
+                _ => (),
+
+            }
+        } else {
+            logy!("debug", "Cuoldn't get mut");
+
+        }
+
+    }
+    pub fn receive_direct_rust0_1(&mut self, link_id: &LinkID, packet: DirectPacket) {
+        println!("processing direct rust:0.1 packet");
         match packet {
             DirectPacket::DearJohn => {
                 let peer_id = unwrap_or_return!( self.get_peer_id_from_link_id(link_id));
@@ -145,7 +202,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 if link_id == &next_hop {
                     // check if we in the trace;
                     if trace.contains(&self.my_id) {
-                        let packet= DirectPacket::LostRouteTo(peer);
+                        let packet= DirectPacket::LostRouteTo{peer};
                         self.direct_broadcast(None, packet);
                         return
                     }
@@ -161,10 +218,23 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 let version = PROTOCAL_VERSION.into();
                 if supported_versions.contains(&version) {
                     if self.neighbors.get(&me).is_some() {
+                        println!("[node:218]Greetings {me} was in neighbors");
                         self.send_direct(link_id.clone(), DirectPacket::NotYouAgain)
                     } else {
-                        self.neighbors.insert(me, link_id.clone());
-                        self.send_direct(link_id.clone(), DirectPacket::TellItToMeIn(version))
+                        if let Some(link_info) = self.link_info.get_mut(link_id) {
+                            link_info.protocal_out = Some(version.clone()); 
+                        }
+                        println!("[node:224] anding {me} to neighbors");
+                        self.neighbors.insert(me.clone(), link_id.clone());
+                        self.routing_table.insert(
+                            me, 
+                            RoutingEntry::new(
+                                link_id.clone(), 
+                                0
+                            )
+                        );
+
+                        self.send_direct(link_id.clone(), DirectPacket::TellItToMeIn{version});
                     }
                 } else {
                     self.send_direct(link_id.clone(), DirectPacket::UnknownVersion);
@@ -172,19 +242,19 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             },
             DirectPacket::InvalidPacket => todo!(),
             DirectPacket::InvalidSalutation => todo!(),
-            DirectPacket::LostRouteTo(peer) => {
+            DirectPacket::LostRouteTo{peer} => {
                 let RoutingEntry { next_hop, routing_cost } = unwrap_or_return!(self.routing_table.get(&peer));
                 if next_hop == link_id {
-                    let packet= DirectPacket::LostRouteTo(peer);
+                    let packet= DirectPacket::LostRouteTo{peer};
                     self.direct_broadcast(None, packet);
                 } else {
-                    let packet = DirectPacket::RoutingInformationExchange(
-                        Vec::from(
+                    let packet = DirectPacket::RoutingInformationExchange{
+                        entries: Vec::from(
                             [
                                 (peer, routing_cost.clone())
                             ]
                         )
-                    );
+                    };
                     self.send_direct(link_id.clone(), packet);
                 }
             },
@@ -244,13 +314,13 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                 }
             },
 
-            DirectPacket::RoutingInformationExchange(entries) => {
+            DirectPacket::RoutingInformationExchange{entries} => {
                 self.update_routing_table(link_id, entries);
             },
-            DirectPacket::TellItToMeIn(version) => {
-                // Todo need to store this the use it when talking to them.
-                if &version != PROTOCAL_VERSION {
-                    self.send_direct(link_id.clone(), DirectPacket::UnknownVersion);
+            DirectPacket::TellItToMeIn{version} => {
+                if let Some(link_info) = self.link_info.get_mut(link_id) {
+                    link_info.protocal_out = Some(version.clone()); 
+                    
                 }
             }
             DirectPacket::UnknownVersion => todo!(),
@@ -259,7 +329,24 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
             },
         };
     }
+    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> LinkID {
+        self.link_id_generator_state += 1;
+        let link_id: LinkID = self.link_id_generator_state.into();
+        self.outgoing.insert(link_id.clone(), Outgoing::new(offer_id, None, Vec::new(), user));
+        self.command_queue.push_back(Command::GenerateAnswer{link_id: link_id.clone(), offer});
+        logy!("tracenode", "receive_offer  linkID:{}", link_id);
+        link_id
+    }
     pub fn receive_packet(&mut self, link_id: &LinkID, packet: Packet<Answer, Offer>) {
+        if let Some(link_info) = self.link_info.get(link_id) {
+            match link_info.protocal_in.as_ref() {
+                _ => {
+                    self.receive_packet_rust0_1(link_id, packet)
+                }
+            }
+        }
+    }    
+    pub fn receive_packet_rust0_1(&mut self, link_id: &LinkID, packet: Packet<Answer, Offer>) {
         if packet.destination == self.my_id {
             match packet.body {
                 PacketBody::Answer { answer, offer_id, ice} => {
@@ -274,7 +361,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                     logy!("error", "Got a reply that I sent a invalid packet");
                 },
                 PacketBody::Offer {offer, offer_id, ice} => {
-                    let id = self.receive_offer(offer, offer_id, packet.source == "User".into());
+                    let id = self.receive_offer(offer, offer_id, packet.source == "User");
                     for icee in ice {
                         self.command_queue.push_back(Command::AddICE { link_id: id.clone(), ice: icee});
                     };
@@ -331,7 +418,7 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
                                     // therefore
                                     // clear are routing to target and announce it
                                     self.routing_table.remove_entry(&packet.source);
-                                    let packet= DirectPacket::LostRouteTo(packet.source.clone());
+                                    let packet= DirectPacket::LostRouteTo{peer: packet.source.clone()};
                                     self.direct_broadcast(None, packet);
                                     return
                                 }
@@ -376,6 +463,9 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
         }
     }
     pub fn get_next_hop_to(&self, peer_id: &PeerID) -> Option<LinkID> {
+        if peer_id == "User" {
+            return Some(0.into())
+        }
         self.neighbors.get(peer_id).cloned()
     }
     pub fn send_direct(&mut self, link_id: LinkID, packet: DirectPacket) {
@@ -411,20 +501,6 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize> Node<Ans
     }
 }
 
-impl<Answer, Offer> Node<Answer, Offer> {
-    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> LinkID {
-        self.link_id_generator_state += 1;
-        let link_id: LinkID = self.link_id_generator_state.into();
-        self.outgoing.insert(link_id.clone(), Outgoing::new(offer_id, None, Vec::new(), user));
-        self.command_queue.push_back(Command::GenerateAnswer{link_id: link_id.clone(), offer});
-        link_id
-    }
-    pub fn receive_answer(&mut self, link_id: LinkID, answer: Answer) {
-    logy!("trace", "{:?} received answer", self.my_id);
-    self.command_queue.push_back(Command::AnswerOffer { link_id, answer });
-
-    }
-}
 
 /// Internal
 impl<Answer, Offer> Node<Answer, Offer> {
@@ -444,7 +520,7 @@ impl<Answer, Offer> Node<Answer, Offer> {
 
 /// routing
  
-impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize>  Node<Answer, Offer> {
+impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::Serialize>  Node<Answer, Offer> {
     fn update_routing_table(&mut self, link_id: &LinkID, entries: Vec<(PeerID, RoutingCost)>) {
         for (peer_id, routing_cost) in entries {
             if let Some(current_entry) = self.routing_table.get_mut(&peer_id) {
@@ -474,6 +550,10 @@ impl<Answer: Clone + serde::Serialize, Offer: Clone + serde::Serialize>  Node<An
             self.command_queue.push_back(Command::SendDirect { link_id: neighbor_link.clone(), packet: packet.clone() });
         }
 
+    }
+    fn post_greeting(&mut self, link_id: &LinkID) {
+        let routing_info= (&self.routing_table).into_iter().map(|(peer_id, routing_entry)| (peer_id.clone(), routing_entry.routing_cost)).collect();
+        self.send_direct(link_id.clone(), DirectPacket::RoutingInformationExchange{entries: routing_info});
     }
 }
 

@@ -21,3 +21,13 @@ impl fmt::Display for PeerID {
         write!(f, "{}", self.0)
     }
 }
+
+impl PartialEq<str> for PeerID {
+    fn eq(&self, other: &str) -> bool {
+        (*self.0).eq(other)
+    }
+}impl PartialEq<&str> for PeerID {
+    fn eq(&self, other: &&str) -> bool {
+        (*self.0).eq(*other)
+    }
+}

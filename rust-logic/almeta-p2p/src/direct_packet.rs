@@ -18,7 +18,7 @@ pub enum DirectPacket {
     },
     InvalidPacket,
     InvalidSalutation,
-    LostRouteTo(PeerID),
+    LostRouteTo{peer: PeerID},
     Me{
         #[serde(rename = "Me")]
         me: PeerID,
@@ -29,8 +29,8 @@ pub enum DirectPacket {
     /// destination is the first item in trace.
     RouteTraceToOriginatorFromTarget{originator: PeerID, trace: Vec<PeerID>},
     /// this is the sending node's routing cost, you need to add 1 to the cost to get the value you would add to your routing table
-    RoutingInformationExchange(Vec::<(PeerID, RoutingCost)>),
-    TellItToMeIn(String),
+    RoutingInformationExchange{entries: Vec::<(PeerID, RoutingCost)>},
+    TellItToMeIn{version: String},
     UnknownVersion,
     Who,
 }

@@ -10,6 +10,8 @@ serde = { version = "1.0.193", features = ["derive", "rc"] }
 serde_json = "1.0.108"
 
 [features]
-default = ["error"]
+default = []#["error", "debug", "tracenode"]
+debug = []
 error = []
 trace = []
+tracenode = []
