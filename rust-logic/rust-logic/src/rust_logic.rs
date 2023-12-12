@@ -26,7 +26,7 @@ impl IRefCounted for RustLogic {
         
         Self {
             base,
-            node: Node::new(format!("{}", utilities::randi()))
+            node: Node::new(format!("{}", utilities::randi()), utilities::randi() as u64 )
         }
     }
 }
@@ -35,11 +35,11 @@ impl IRefCounted for RustLogic {
 impl RustLogic {
     #[func]
     pub fn channel_closed(&mut self, link_id: LinkID) {
-        self.node.channel_closed(&link_id.into())
+        self.node.link_closed(&link_id.into())
     }
     #[func]
     fn channel_established(&mut self, link_id: LinkID) {
-        self.node.channel_established(&link_id.into())
+        self.node.link_established(&link_id.into())
     }
     #[func]
     fn generate_offer(&mut self) -> LinkID {

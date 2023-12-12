@@ -4,7 +4,7 @@ use crate::{logy, OfferID, packet::PacketBody, unwrap_or_return};
 use super::{LinkID, Command, ICE, DirectPacket, Packet, PeerID, Perigee, routing_entry::{RoutingCost, RoutingEntry}, Incoming, Outgoing};
 
 const PROTOCAL_VERSION: &str = concat!("Rust", ":", "0.1");
-
+const IDEAL_NUMBER_OF_NEIGHBORS: usize = 8;
 #[derive(Debug)]
 struct LinkInfo {
     pub protocal_in: Option<String>,
@@ -19,6 +19,7 @@ impl LinkInfo{
 }
 #[derive(Debug)]
 pub struct Node<Answer, Offer> {
+    rng: thats_so_random::Pcg32,
     pub command_queue: VecDeque<Command<Answer, Offer>>,
 
     pub my_id: PeerID,
@@ -39,9 +40,10 @@ pub struct Node<Answer, Offer> {
 
 /// Creation
 impl<Answer, Offer> Node<Answer, Offer> {
-    pub fn new(my_id: String) -> Self {
+    pub fn new(my_id: String, state: u64) -> Self {
         let my_id = my_id.into();
         Self {
+            rng: thats_so_random::Pcg32::new(state, thats_so_random::DEFAULT_STREAM),
             command_queue: VecDeque::new(), 
             my_id, 
             neighbors: HashMap::new(),
@@ -65,13 +67,14 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
         link_id
     }
     */
-    pub fn channel_closed(&mut self, link_id: &LinkID) {
+    pub fn link_closed(&mut self, link_id: &LinkID) {
         self.neighbors.retain(|_peer_id, test_link_id| test_link_id != link_id);
         self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
         self.link_info.remove(link_id);
+        self.eval_neighbors();
     }
-    pub fn channel_established(&mut self, link_id: &LinkID) {
+    pub fn link_established(&mut self, link_id: &LinkID) {
         logy!("tracenode", "connection established on link:{link_id}");
         self.incoming.remove(&self.link_id_to_offer_id(link_id));
         self.outgoing.remove(link_id);
@@ -132,20 +135,23 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
         logy!("tracenode", "node {} got back answer [{:?}] for channel {}", self.my_id, answer, link_id);
         let outgoing = unwrap_or_return!(
             self.outgoing.get_mut(link_id),
-            logy!("trace", "coundn't find outgoing {link_id}"),
+            logy!("error", "coundn't find outgoing {link_id}"),
             ()
         );
-        if outgoing.user {
-            self.command_queue.push_back(Command::UserAnswer { link_id: link_id.clone(), answer: answer.clone() });
-        }
-        outgoing.answer = Some(answer);
+        outgoing.answer = Some(answer.clone());
+        let Some(peer_id) = outgoing.peer.clone() else {
+            self.command_queue.push_back(Command::UserAnswer { link_id: link_id.clone(), answer: answer });
+            return
+        };
+        let packet = PacketBody::Answer { answer, offer_id: outgoing.offer_id.clone(), ice: outgoing.ice.clone() };
+        self.send_to(peer_id, packet)
     }
     // this should take a link_id on the other side of the binding is only aware on links and not the interstuff like Offers
     pub fn on_offer_generated(&mut self, link_id: &LinkID, offer: Offer) {
         let offer_id = self.link_id_to_offer_id(link_id);
         let incoming = unwrap_or_return!(
             self.incoming.get_mut(&offer_id),
-            logy!("tracenode", "incoming {link_id:?} not found"),
+            logy!("error", "incoming {link_id:?} not found"),
             ()   
         );
         incoming.offer = Some(offer.clone());
@@ -202,6 +208,10 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                 }
             },
             DirectPacket::DistanceIncrease { peer, mut trace } => {
+                // we don't keep routing info about ourself.
+                if &peer == &self.my_id {
+                    return;
+                }
                 let next_hop = unwrap_or_return!(self.get_next_hop_to(&peer));
                 if link_id == &next_hop {
                     // check if we in the trace;
@@ -211,6 +221,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                         return
                     }
                     trace.push(self.my_id.clone());
+                    println!("[node:{}] {} adding {} to RT", line!(), self.my_id, peer);
                     self.routing_table.insert(peer.clone(), RoutingEntry::new(next_hop, trace.len() as u32));
                     let packet= DirectPacket::DistanceIncrease { peer, trace};
                     self.direct_broadcast(Some(link_id), packet);
@@ -230,6 +241,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                         }
                         logy!("tracenode", "adding {me} to neighbors");
                         self.neighbors.insert(me.clone(), link_id.clone());
+                        println!("[node:{}] {} adding {} to RT", line!(), self.my_id, me);
                         self.routing_table.insert(
                             me, 
                             RoutingEntry::new(
@@ -333,10 +345,10 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
             },
         };
     }
-    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, user: bool) -> LinkID {
+    pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, peer: Option<PeerID>) -> LinkID {
         self.link_id_generator_state += 1;
         let link_id: LinkID = self.link_id_generator_state.into();
-        self.outgoing.insert(link_id.clone(), Outgoing::new(offer_id, None, Vec::new(), user));
+        self.outgoing.insert(link_id.clone(), Outgoing::new(offer_id, None, Vec::new(), peer));
         self.command_queue.push_back(Command::GenerateAnswer{link_id: link_id.clone(), offer});
         logy!("tracenode", "receive_offer  linkID:{}", link_id);
         link_id
@@ -365,7 +377,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                     logy!("error", "Got a reply that I sent a invalid packet");
                 },
                 PacketBody::Offer {offer, offer_id, ice} => {
-                    let id = self.receive_offer(offer, offer_id, packet.source == "User");
+                    let id = self.receive_offer(offer, offer_id, None);
                     for icee in ice {
                         self.command_queue.push_back(Command::AddICE { link_id: id.clone(), ice: icee});
                     };
@@ -426,6 +438,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                                     self.direct_broadcast(None, packet);
                                     return
                                 }
+                                println!("[node:{}] {} adding {} to RT", line!(), self.my_id, packet.source);
                                 self.routing_table.insert(
                                     packet.source.clone(), 
                                     RoutingEntry::new(
@@ -470,7 +483,14 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
         if peer_id == "User" {
             return Some(0.into())
         }
-        self.neighbors.get(peer_id).cloned()
+        if let Some(neighbor) = self.neighbors.get(peer_id).cloned() {
+            return Some(neighbor)
+        } else {
+            let Some(x) = self.routing_table.get(peer_id) else {
+                return None
+            };
+            return Some(x.next_hop.clone())
+        }
     }
     pub fn send_direct(&mut self, link_id: LinkID, packet: DirectPacket) {
         Self::send_direct_inner(&mut self.command_queue, link_id, packet);
@@ -513,6 +533,9 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
 impl<Answer, Offer> Node<Answer, Offer> {
     /// is_keeper() returns  true if we want to keep a connection to the peer and false if we don't mind disconnecting from them
     fn is_keeper(&self, peer_id: &PeerID) -> bool {
+        if self.perigee.keepers.len() < IDEAL_NUMBER_OF_NEIGHBORS {
+            return true
+        }
         self.perigee.is_keeper(peer_id)
     }
     fn get_peer_id_from_link_id(&self, link_id: &LinkID) -> Option<PeerID> {
@@ -535,7 +558,12 @@ impl<Answer, Offer> Node<Answer, Offer> {
  
 impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::Serialize>  Node<Answer, Offer> {
     fn update_routing_table(&mut self, link_id: &LinkID, entries: Vec<(PeerID, RoutingCost)>) {
+        println!(">>>[node:{}]rt:{:?}\n>>>[node:{}]new{:?}", line!(), self.routing_table, line!(), entries);
         for (peer_id, routing_cost) in entries {
+            // we don't keep routing info about ourself.
+            if &peer_id == &self.my_id {
+                continue;
+            }
             if let Some(current_entry) = self.routing_table.get_mut(&peer_id) {
                 if routing_cost <= current_entry.routing_cost {
                     // Update the routing table if a better route is found
@@ -551,8 +579,12 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                     //overriding_routing(link_id, peer_id.clone(), PacketBody::RequestTraceToMe);
                     //todo!("need to request a trace route to {peer_id}");
                 }
+            } else {
+                println!("[node:{}] {} adding {} to RT", line!(), self.my_id, peer_id);
+                self.routing_table.insert(peer_id, RoutingEntry{next_hop: link_id.clone(), routing_cost: routing_cost + 1});
             }
         }
+        self.eval_neighbors()
     }
     #[allow(dead_code)]
     fn direct_broadcast(&mut self, exclude: Option<&LinkID>, packet:DirectPacket) {
@@ -565,18 +597,52 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
 
     }
     fn post_greeting(&mut self, link_id: &LinkID) {
-        let routing_info= (&self.routing_table).into_iter().map(|(peer_id, routing_entry)| (peer_id.clone(), routing_entry.routing_cost)).collect();
-        self.send_direct(link_id.clone(), DirectPacket::RoutingInformationExchange{entries: routing_info});
+        let routing_info: Vec::<(PeerID, RoutingCost)>;
+        if let Some(them) = self.get_peer_id_from_link_id(link_id){ 
+            routing_info= (&self.routing_table).into_iter().filter(|(x, _)|x == &&them).map(|(peer_id, routing_entry)| (peer_id.clone(), routing_entry.routing_cost)).collect();
+        } else {
+            routing_info= (&self.routing_table).into_iter().map(|(peer_id, routing_entry)| (peer_id.clone(), routing_entry.routing_cost)).collect();
+        }
+        if !routing_info.is_empty() {
+            self.send_direct(link_id.clone(), DirectPacket::RoutingInformationExchange{entries: routing_info});
+        }
     }
 }
 
 impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::Serialize> Node<Answer, Offer> {
-    pub fn tick(&mut self) {
+    pub fn eval_neighbors(&mut self) {
         self.perigee.perigee(0.5);
         for (peer_id, link_id) in &self.neighbors {
              if ! self.is_keeper(peer_id) {
                 Self::send_direct_inner(&mut self.command_queue, link_id.clone(), DirectPacket::DearJohn);
              }
         }
+        let number_of_neighbors = self.neighbors.len();
+        if number_of_neighbors > IDEAL_NUMBER_OF_NEIGHBORS {
+            println!("[node:{}]{} has enough naighbors", line!(), self.my_id);
+            return;
+        }
+        let mut available: Vec<PeerID> = self.routing_table.keys().filter(|&x| !self.neighbors.contains_key(x)).map(|x| x.clone()).collect();
+        println!("[node:{}]{} availible:{available:?}", line!(), self.my_id);
+        for idx in 0..(IDEAL_NUMBER_OF_NEIGHBORS - number_of_neighbors).max(0) {
+            if available.is_empty() {
+                println!("[node:{}] {} exhausted available peers after {idx}", line!(), self.my_id);
+                break;
+            }
+            let peer_id = unwrap_or_return!(self.rng.random_item(&mut available),println!("failed to get radom item"),());
+            self.send_to(peer_id.clone(), PacketBody::RequestOffer);            
+        }
     }
+    pub fn share_routing_info(&mut self) {
+        let routing_info: Vec<(PeerID, u32)>= (&self.routing_table).into_iter().map(|(peer_id, routing_entry)| (peer_id.clone(), routing_entry.routing_cost)).collect();
+        for (neighbor_peer_id, neighbot_link_id) in self.neighbors.clone().into_iter(){
+            let entries = routing_info.clone().into_iter().filter(|(x, _)| x != &neighbor_peer_id).collect();
+            self.send_direct(neighbot_link_id, DirectPacket::RoutingInformationExchange{entries});
+        }
+    }
+    pub fn tick(&mut self) {
+        self.eval_neighbors();
+        self.share_routing_info();
+    }
+ 
  }

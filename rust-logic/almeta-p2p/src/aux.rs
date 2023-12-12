@@ -9,15 +9,15 @@ use super::ICE;
 
 #[derive(Debug)]
 pub struct Outgoing<Answer> {
-    pub user: bool,
+    pub peer: Option<PeerID>,
     pub offer_id: OfferID,
     pub answer: Option<Answer>,
     pub ice: Vec<ICE>,
 }
 
 impl<Answer> Outgoing<Answer>{
-    pub fn new(offer_id: OfferID, answer: Option<Answer>, ice: Vec<ICE>, user: bool) -> Self {
-        Self { offer_id, answer, ice, user }
+    pub fn new(offer_id: OfferID, answer: Option<Answer>, ice: Vec<ICE>, peer: Option<PeerID>) -> Self {
+        Self { offer_id, answer, ice, peer }
     }
 }
 #[derive(Debug)]

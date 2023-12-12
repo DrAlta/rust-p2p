@@ -1,5 +1,5 @@
 
-mod aux;
+pub mod aux;
 use aux::{Incoming, OfferID, Outgoing};
 pub use aux::LinkID;
 mod command;

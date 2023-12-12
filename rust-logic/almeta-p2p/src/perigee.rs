@@ -14,7 +14,7 @@ type PacketID = usize;
 pub struct Perigee {
     count_and_first_observed: HashMap<PacketID, (i8, Observation)>,
     observations: HashMap<PeerID, HashMap<PacketID, Observation>>,
-    keepers: HashMap<PeerID, f64>,
+    pub keepers: HashMap<PeerID, f64>,
 }
 
 impl Perigee {
