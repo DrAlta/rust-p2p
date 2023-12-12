@@ -19,4 +19,4 @@ pub mod routing_entry;
 pub mod perigee;
 mod user_json;
 pub use user_json::UserJSON;
-pub mod macros;
+

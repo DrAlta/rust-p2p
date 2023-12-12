@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use crate::{logy, OfferID, packet::PacketBody, unwrap_or_return};
+use qol::{logy, unwrap_or_return};
+use crate::{OfferID, packet::PacketBody};
 
 use super::{LinkID, Command, ICE, DirectPacket, Packet, PeerID, Perigee, routing_entry::{RoutingCost, RoutingEntry}, Incoming, Outgoing};
 
@@ -221,7 +222,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                         return
                     }
                     trace.push(self.my_id.clone());
-                    println!("[node:{}] {} adding {} to RT", line!(), self.my_id, peer);
+                    logy!("tracenode", "{} adding {} to RT", self.my_id, peer);
                     self.routing_table.insert(peer.clone(), RoutingEntry::new(next_hop, trace.len() as u32));
                     let packet= DirectPacket::DistanceIncrease { peer, trace};
                     self.direct_broadcast(Some(link_id), packet);
@@ -241,7 +242,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                         }
                         logy!("tracenode", "adding {me} to neighbors");
                         self.neighbors.insert(me.clone(), link_id.clone());
-                        println!("[node:{}] {} adding {} to RT", line!(), self.my_id, me);
+                        logy!("tracenode", "{} adding {} to RT", self.my_id, me);
                         self.routing_table.insert(
                             me, 
                             RoutingEntry::new(
@@ -438,7 +439,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                                     self.direct_broadcast(None, packet);
                                     return
                                 }
-                                println!("[node:{}] {} adding {} to RT", line!(), self.my_id, packet.source);
+                                logy!("tracenode", "{} adding {} to RT", self.my_id, packet.source);
                                 self.routing_table.insert(
                                     packet.source.clone(), 
                                     RoutingEntry::new(
@@ -580,7 +581,7 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
                     //todo!("need to request a trace route to {peer_id}");
                 }
             } else {
-                println!("[node:{}] {} adding {} to RT", line!(), self.my_id, peer_id);
+                logy!("tracenode", "{} adding {} to RT", self.my_id, peer_id);
                 self.routing_table.insert(peer_id, RoutingEntry{next_hop: link_id.clone(), routing_cost: routing_cost + 1});
             }
         }
@@ -619,17 +620,17 @@ impl<Answer: Clone + std::fmt::Debug + serde::Serialize, Offer: Clone + serde::S
         }
         let number_of_neighbors = self.neighbors.len();
         if number_of_neighbors > IDEAL_NUMBER_OF_NEIGHBORS {
-            println!("[node:{}]{} has enough naighbors", line!(), self.my_id);
+            logy!("tracenode", "{} has enough naighbors", self.my_id);
             return;
         }
         let mut available: Vec<PeerID> = self.routing_table.keys().filter(|&x| !self.neighbors.contains_key(x)).map(|x| x.clone()).collect();
-        println!("[node:{}]{} availible:{available:?}", line!(), self.my_id);
+        logy!("tracenode", "{} has availible:{available:?}", self.my_id);
         for idx in 0..(IDEAL_NUMBER_OF_NEIGHBORS - number_of_neighbors).max(0) {
             if available.is_empty() {
-                println!("[node:{}] {} exhausted available peers after {idx}", line!(), self.my_id);
+                logy!("tracenode", "{} exhausted available peers after {idx}", self.my_id);
                 break;
             }
-            let peer_id = unwrap_or_return!(self.rng.random_item(&mut available),println!("failed to get radom item"),());
+            let peer_id = self.rng.random_item(&mut available).expect("we already checked that available wasn't empty so there is no reason we shoulfn't be able to get an item from it");
             self.send_to(peer_id.clone(), PacketBody::RequestOffer);            
         }
     }

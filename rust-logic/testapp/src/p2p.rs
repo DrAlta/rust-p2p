@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::{HashMap, VecDeque}, cell::RefCell};
-
+pub use qol::logy;
 use almeta_p2p::{Command, Packet, Node, DirectPacket, LinkID, aux::OfferID};
 
 
@@ -59,8 +59,10 @@ struct NetworkSim {
 
     answered_queue: Vec::<Answer>,
 
+    /*
     peer_a_user_offer_link_id: (LinkID, OfferID),
     peer_b_user_offer_link_id: (LinkID, OfferID),
+    */
 
 }
 impl  NetworkSim {
@@ -70,8 +72,8 @@ impl  NetworkSim {
             RefCell::new(Node::new("PeerB".into(), 2)),
             RefCell::new(Node::new("PeerC".into(), 3)),
         ];
-        let peer_a_user_offer_link_id = peers[0].borrow_mut().generate_offer(None);
-        let peer_b_user_offer_link_id = peers[1].borrow_mut().generate_offer(None);        
+        let _peer_a_user_offer_link_id = peers[0].borrow_mut().generate_offer(None);
+        let _peer_b_user_offer_link_id = peers[1].borrow_mut().generate_offer(None);        
         Self {
             peers,
             peers_channel_to_link: [
@@ -83,10 +85,10 @@ impl  NetworkSim {
             user_offers_to_be_routed: Vec::<(usize, Offer, OfferID)>::new(),
         
             answered_queue: Vec::<Answer>::new(),
-        
+        /*
             peer_a_user_offer_link_id,
             peer_b_user_offer_link_id,
-        
+        */
         }
     }
     pub fn sim(&mut self) {
@@ -122,8 +124,8 @@ impl  NetworkSim {
                             },
                             Command::GenerateAnswer { link_id, offer } => {
                              
-                                self.peers_channel_to_link[offer.offering_peer_idx].insert(offer.offering_link_id.clone(), Connection { peer_idx: peer_idx.clone(), link_id: link_id.clone()});
-                                self.peers_channel_to_link[peer_idx.clone()].insert(link_id.clone(), Connection { peer_idx: offer.offering_peer_idx, link_id: offer.offering_link_id.clone()});
+                                self.peers_channel_to_link[offer.offering_peer_idx].insert(offer.offering_link_id.clone(), Connection::new( peer_idx.clone(), link_id.clone()));
+                                self.peers_channel_to_link[peer_idx.clone()].insert(link_id.clone(), Connection::new(offer.offering_peer_idx, offer.offering_link_id.clone()));
                                 let answer = Answer::new(offer.offering_peer_idx, offer.offering_link_id, peer_idx.clone(), link_id.clone());
                                 peer.on_answer_generated(&link_id, answer);
                             },
