@@ -1,15 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::{HashMap, VecDeque}, cell::RefCell};
 pub use qol::logy;
-use almeta_p2p::{Command, Packet, Node, direct_packet::DirectPacket, LinkID, aux::OfferID};
+use almeta_p2p::{Command, Node, direct_packet::DirectPacket, LinkID, aux::OfferID};
 
-
+type Packet = String;
 //pub type Offer = String;
 
 
 #[derive(Debug)]
-enum Message<Answer, Offer> {
-    Packet(Packet<Answer, Offer>),
+enum Message {
+    Packet(Packet),
     DirectPacket(DirectPacket),
 }
 
@@ -142,7 +142,7 @@ impl  NetworkSim {
                             },
                             Command::Send { link_id, packet } => {x.push((
                                 self.peers_channel_to_link[peer_idx][&link_id].clone(),
-                                Message::Packet(packet)
+                                Message::Packet(serde_json::to_string(&packet).unwrap())
                             ))},
                             Command::SendDirect { link_id, packet } => x.push((
                                 {
@@ -187,7 +187,7 @@ impl  NetworkSim {
                 continue_ka = true;
                 println!("Peer {peer_idx} Message: {:?}", message);
                 match message {
-                    Message::Packet(packet) => self.peers[peer_idx].borrow_mut().receive_packet(&link_id, packet),
+                    Message::Packet(packet) => self.peers[peer_idx].borrow_mut().receive_packet(&link_id, &packet, 1),
                     Message::DirectPacket(packet_type) => self.peers[peer_idx].borrow_mut().receive_direct(&link_id, packet_type),
                 }
             }

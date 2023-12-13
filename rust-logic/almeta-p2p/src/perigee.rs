@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use super::PeerID;
 
-type Observation = i64;
-type PacketID = usize;
+pub type Observation = i64;
+type PacketID = u128;
 
 
 
@@ -53,8 +53,8 @@ impl Perigee {
         }
         self.count_and_first_observed.retain(|packet_id, _observation| keep.contains(packet_id));
     }
-    pub fn observe(&mut self, peer_id: &PeerID, packet_id: &PacketID, observation: Observation ) {
-        if let Some((count, previous_observation)) = self.count_and_first_observed.get_mut(packet_id) {
+    pub fn observe(&mut self, peer_id: &PeerID, packet_id: PacketID, observation: Observation ) {
+        if let Some((count, previous_observation)) = self.count_and_first_observed.get_mut(&packet_id) {
             let _ = std::mem::replace(count, 1_i8 + *count );
             if &observation < previous_observation {
                 let _ = std::mem::replace(previous_observation, observation.clone());
@@ -66,11 +66,11 @@ impl Perigee {
             );
         }
         if let Some(observation_map) = self.observations.get_mut(peer_id) {
-            if !observation_map.contains_key(packet_id) {
-                observation_map.insert(packet_id.clone(), observation);
+            if !observation_map.contains_key(&packet_id) {
+                observation_map.insert(packet_id, observation);
             }
         } else {
-            self.observations.insert(peer_id.clone(), HashMap::from([(packet_id.clone(), observation)]));
+            self.observations.insert(peer_id.clone(), HashMap::from([(packet_id, observation)]));
         }
     }
 
@@ -126,19 +126,21 @@ impl Perigee {
     
             for (neighbor_id, observations_map) in &self.observations {
                 let observations = collect_observations(observations_map, &self.count_and_first_observed);
-                let [ucb, lcb] = calculate_cb(&observations, c);
-               
-                if lcb > max_lcb {
-                    max_lcb = lcb;
-                } else {
-                    new_keepers.insert(
-                        neighbor_id.clone(), 
-                        (lcb + ucb) / 2.0
-                    );
-                }
-    
-                if ucb < min_ucb {
-                    min_ucb = ucb;
+                if observations.len() > 2 {
+                    let [ucb, lcb] = calculate_cb(&observations, c);
+                
+                    if lcb > max_lcb {
+                        max_lcb = lcb;
+                    } else {
+                        new_keepers.insert(
+                            neighbor_id.clone(), 
+                            (lcb + ucb) / 2.0
+                        );
+                    }
+        
+                    if ucb < min_ucb {
+                        min_ucb = ucb;
+                    }
                 }
             }
     
@@ -157,17 +159,17 @@ fn main() {
     let c = "c".into();
     let d = "d".into();
 
-    n.observe(&a, &1, 10);
-    n.observe(&b, &1, 15);
-    n.observe(&c, &1, 20);
+    n.observe(&a, 1, 10);
+    n.observe(&b, 1, 15);
+    n.observe(&c, 1, 20);
 
-    n.observe(&a, &2, 20);
-    n.observe(&b, &2, 23);
-    n.observe(&c, &2, 26);
-    n.observe(&d, &2, 30);
+    n.observe(&a, 2, 20);
+    n.observe(&b, 2, 23);
+    n.observe(&c, 2, 26);
+    n.observe(&d, 2, 30);
 
-    n.observe(&a, &3, 10);
-    n.observe(&b, &3, 15);
+    n.observe(&a, 3, 10);
+    n.observe(&b, 3, 15);
 
     n.perigee(con);
     println!("{:#?}", n.keepers);

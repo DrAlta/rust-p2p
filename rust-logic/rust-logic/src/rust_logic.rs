@@ -4,7 +4,7 @@ use godot::prelude::*;
 use godot::engine::RefCounted;
 use godot::engine::IRefCounted;
 
-use almeta_p2p::{direct_packet::DirectPacket, DirectBody, Node, Packet};
+use almeta_p2p::Node;
 
 type Answer = String;
 type Offer = String;
@@ -142,19 +142,8 @@ impl RustLogic {
 
 
     #[func]
-    fn receive_packet(&mut self, link_id: LinkID, json_packet: String) {
-        if let Ok(packet) = serde_json::from_str::<Packet::<Answer, Offer>>(&json_packet) {
-            self.node.receive_packet(&link_id.into(), packet)
-        } else if let Ok(packet) = serde_json::from_str::<DirectPacket>(&json_packet) {
-            self.node.receive_direct(&link_id.into(), packet)
-        } else {
-            self.node.command_queue.push_back(
-                almeta_p2p::Command::SendDirect { 
-                    link_id: link_id.into(), 
-                    packet: DirectBody::InvalidPacket.into()
-                }
-            )
-        };
+    fn receive_packet(&mut self, link_id: LinkID, packet: String, timestamp: i64) {
+        self.node.receive_packet(&link_id.into(), &packet, timestamp);
     }
     /* this is how to conver a sting into a PackedByteArray
     #[func]
