@@ -24,7 +24,7 @@ use crate::LinkID;
 use super::{OfferID, PeerID, ICE};
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Packet<Answer, Offer> {
     #[serde(rename = "Source")]
     pub source: PeerID, 
@@ -57,10 +57,13 @@ impl<Answer: std::fmt::Debug, Offer: std::fmt::Debug> Packet<Answer, Offer> {
             )
         )
     }
+    pub fn varify(&self) -> bool {
+        self.md5 == self.checksum()
+    }
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum PacketBody<Answer, Offer> {
     Answer{
         #[serde(rename = "Answer")]
@@ -134,5 +137,156 @@ pub fn main(){
     let packet = Packet::new("Source".into(), "Destination".into(), inner);
     println!("\n{}\n", serde_json::to_string(&packet).unwrap());
     println!("{}\n", serde_json::to_string(&packet).unwrap());
+
+}
+
+#[cfg(test)]
+mod varify_tests {
+    use super::*;
+
+    #[test]
+    fn answer() {
+        let body = PacketBody::<String, String>::Answer{
+            answer: "Answer".into(),
+            offer_id: 1.into(),
+            ice: Vec::from([ICE::new("media".into(), 1, "name".into())]),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn offer() {
+        let body = PacketBody::<String, String>::Offer{
+        offer: "Offer".into(),
+        offer_id: 1.into(),
+        ice: Vec::from([ICE::new("media".into(), 1, "name".into())]),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn invalid_packet() {
+        let body = PacketBody::<String, String>::InvalidPacket;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn goodbye() {
+        let body = PacketBody::<String, String>::Goodbye;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn new_ice() {
+        let body = PacketBody::<String, String>::NewICE{
+            link_id: 1.into(),
+            ice: ICE::new("media".into(), 1, "name".into()),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn request_offer() {
+        let body = PacketBody::<String, String>::RequestOffer;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn request_trace_to_me() {
+        let body = PacketBody::<String, String>::RequestTraceToMe;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+        
+    #[test]
+    fn return_route_trace() {
+        let body = PacketBody::<String, String>::ReturnRouteTrace{
+            trace: Vec::from(["A".into(), "B".into()])};
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert!(packet.varify());
+    }
+
+
+}
+
+#[cfg(test)]
+mod json_tests {
+    use serde_json::{to_string, from_str};
+    use super::*;
+
+    #[test]
+    fn answer() {
+        let body = PacketBody::<String, String>::Answer{
+            answer: "Answer".into(),
+            offer_id: 1.into(),
+            ice: Vec::from([ICE::new("media".into(), 1, "name".into())]),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn offer() {
+        let body = PacketBody::<String, String>::Offer{
+        offer: "Offer".into(),
+        offer_id: 1.into(),
+        ice: Vec::from([ICE::new("media".into(), 1, "name".into())]),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn invalid_packet() {
+        let body = PacketBody::<String, String>::InvalidPacket;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn goodbye() {
+        let body = PacketBody::<String, String>::Goodbye;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn new_ice() {
+        let body = PacketBody::<String, String>::NewICE{
+            link_id: 1.into(),
+            ice: ICE::new("media".into(), 1, "name".into()),
+        };
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn request_offer() {
+        let body = PacketBody::<String, String>::RequestOffer;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn request_trace_to_me() {
+        let body = PacketBody::<String, String>::RequestTraceToMe;
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+        
+    #[test]
+    fn return_route_trace() {
+        let body = PacketBody::<String, String>::ReturnRouteTrace{
+            trace: Vec::from(["A".into(), "B".into()])};
+        let packet = Packet::new("A".into(), "B".into(), body);
+        assert_eq!(packet, from_str(&to_string(&packet).unwrap()).unwrap());
+    }
+
 
 }
