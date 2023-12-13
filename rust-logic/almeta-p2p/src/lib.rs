@@ -5,7 +5,7 @@ pub use aux::LinkID;
 mod command;
 pub use command::Command;
 pub mod direct_packet;
-pub use direct_packet::DirectPacket;
+pub use direct_packet::DirectBody;
 mod ice;
 pub use ice::ICE;
 mod node;

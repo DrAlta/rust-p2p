@@ -17,6 +17,7 @@
 //!         }
 //!     }
 //! }:
+use md5;
 use serde::{Deserialize, Serialize};
 use crate::LinkID;
 
@@ -31,6 +32,31 @@ pub struct Packet<Answer, Offer> {
     pub destination: PeerID, 
     #[serde(rename = "Body")]
     pub body: PacketBody<Answer, Offer>,
+    #[serde(rename = "MD5")]
+    pub md5: String,
+}
+impl<Answer: std::fmt::Debug, Offer: std::fmt::Debug> Packet<Answer, Offer> {
+    pub fn new(source:PeerID, destination: PeerID, body: PacketBody<Answer, Offer>) -> Self{
+        let canonical_form = format!("Packet:{}:{}:{:?}", source, destination, body.to_canonical_form());
+        let md5 = format!(
+            "{:x}", 
+            md5::compute(
+                canonical_form
+            )
+        );
+        Self{ source, destination, body, md5 }
+    }
+    pub fn to_canonical_form(&self) -> String {
+        format!("Packet:{}:{}:{:?}", self.source, self.destination, self.body.to_canonical_form())
+    }
+    pub fn checksum(&self) -> String {
+        format!(
+            "{:x}", 
+            md5::compute(
+                self.to_canonical_form()
+            )
+        )
+    }
 }
 
 
@@ -63,7 +89,7 @@ pub enum PacketBody<Answer, Offer> {
     },
     RequestOffer,
     RequestTraceToMe,
-    ReturnRouteTrace(Vec<PeerID>),
+    ReturnRouteTrace{trace:Vec<PeerID>},
  //   WhoAreYourNeighbors,
     /* this is for unknown packets
     #[serde(untagged)]
@@ -71,11 +97,41 @@ pub enum PacketBody<Answer, Offer> {
     */
 
 }
+impl<Answer: std::fmt::Debug, Offer: std::fmt::Debug> PacketBody<Answer, Offer> {
+    pub fn to_canonical_form(&self) -> String {
+        match self {
+            PacketBody::Answer { answer, offer_id, ice } => {
+                format!("Answer:{answer:?}:{offer_id}:{ice:?}")
+            },
+            PacketBody::Offer { offer, offer_id, ice } => {
+                format!("Offer:{offer:?}:{offer_id}:{ice:?}")
+            },
+            PacketBody::InvalidPacket => {
+                "InvalidPacket".into()
+            },
+            PacketBody::Goodbye => {
+                "Goodbye".into()
+            },
+            PacketBody::NewICE { link_id, ice } => {
+                format!("NewICE:{link_id}:{ice:?}")
+            },
+            PacketBody::RequestOffer => {
+                "RequestOffer".into()
+            },
+            PacketBody::RequestTraceToMe => {
+                "RequestTraceToMe".into()
+            },
+            PacketBody::ReturnRouteTrace{trace} => {
+                format!("ReturnRouteTrace:{trace:?}")
+            },
+        }
+    }
+}
 
 pub fn main(){
     let inner = PacketBody::<String, String>::Answer { answer: "spam".into(), offer_id: 69.into(), ice: Vec::from([ICE::new("ham".into(), 2, "sausage".into())]) };
     //let outer = Outer::Answer(inner);
-    let packet = Packet{source: "Source".into(), destination: "Destination".into(),body: inner};
+    let packet = Packet::new("Source".into(), "Destination".into(), inner);
     println!("\n{}\n", serde_json::to_string(&packet).unwrap());
     println!("{}\n", serde_json::to_string(&packet).unwrap());
 

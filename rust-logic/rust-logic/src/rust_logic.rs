@@ -4,7 +4,7 @@ use godot::prelude::*;
 use godot::engine::RefCounted;
 use godot::engine::IRefCounted;
 
-use almeta_p2p::{DirectPacket, Node, Packet};
+use almeta_p2p::{direct_packet::DirectPacket, DirectBody, Node, Packet};
 
 type Answer = String;
 type Offer = String;
@@ -151,7 +151,7 @@ impl RustLogic {
             self.node.command_queue.push_back(
                 almeta_p2p::Command::SendDirect { 
                     link_id: link_id.into(), 
-                    packet: DirectPacket::InvalidPacket
+                    packet: DirectBody::InvalidPacket.into()
                 }
             )
         };

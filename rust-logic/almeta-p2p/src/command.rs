@@ -2,7 +2,7 @@ use std::fmt;
 use serde::{self, Deserialize, Serialize};
 use serde_json;
 
-use super::{LinkID, ICE, Packet, DirectPacket};
+use super::{LinkID, ICE, Packet, direct_packet::DirectPacket};
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Command<Answer, Offer> {
     AddICE{link_id: LinkID, ice: ICE},

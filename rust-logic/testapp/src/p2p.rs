@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::{HashMap, VecDeque}, cell::RefCell};
 pub use qol::logy;
-use almeta_p2p::{Command, Packet, Node, DirectPacket, LinkID, aux::OfferID};
+use almeta_p2p::{Command, Packet, Node, direct_packet::DirectPacket, LinkID, aux::OfferID};
 
 
 //pub type Offer = String;

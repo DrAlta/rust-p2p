@@ -58,6 +58,11 @@ impl OfferID {
         self.0
     }
 }
+impl fmt::Display for OfferID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 
 #[derive(Debug, Clone,Deserialize,Serialize,Hash,PartialEq, Eq, PartialOrd, Ord)]
