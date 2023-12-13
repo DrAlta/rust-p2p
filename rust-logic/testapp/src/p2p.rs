@@ -188,7 +188,7 @@ impl  NetworkSim {
                 println!("Peer {peer_idx} Message: {:?}", message);
                 match message {
                     Message::Packet(packet) => self.peers[peer_idx].borrow_mut().receive_packet(&link_id, &packet, 1),
-                    Message::DirectPacket(packet_type) => self.peers[peer_idx].borrow_mut().receive_direct(&link_id, packet_type),
+                    Message::DirectPacket(packet_type) => self.peers[peer_idx].borrow_mut().receive_packet(&link_id, &serde_json::to_string(&packet_type).unwrap(), 1),
                 }
             }
             if !continue_ka {

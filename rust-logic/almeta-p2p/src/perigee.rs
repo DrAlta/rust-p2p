@@ -14,7 +14,7 @@ type PacketID = u128;
 pub struct Perigee {
     count_and_first_observed: HashMap<PacketID, (i8, Observation)>,
     observations: HashMap<PeerID, HashMap<PacketID, Observation>>,
-    pub keepers: HashMap<PeerID, f64>,
+    pub keepers: Vec<PeerID>,
 }
 
 impl Perigee {
@@ -113,13 +113,14 @@ impl Perigee {
         Self {
             count_and_first_observed: HashMap::new(),
             observations: HashMap::new(),
-            keepers: HashMap::new(),
+            keepers: Vec::new(),
         }
     }
     pub fn is_keeper(&self, peer_id: &PeerID) -> bool {
-        self.keepers.contains_key(peer_id)
+        self.keepers.contains(peer_id)
     }
-    pub fn perigee(&mut self, c: f64)  {
+    pub fn perigee(&mut self, c: f64) -> Option<PeerID> {
+        let mut victum = None;
             let mut new_keepers = HashMap::new();
             let mut max_lcb = f64::NEG_INFINITY;
             let mut min_ucb = f64::INFINITY;
@@ -131,6 +132,7 @@ impl Perigee {
                 
                     if lcb > max_lcb {
                         max_lcb = lcb;
+                        victum = Some(neighbor_id.clone());
                     } else {
                         new_keepers.insert(
                             neighbor_id.clone(), 
@@ -143,13 +145,26 @@ impl Perigee {
                     }
                 }
             }
+            let _= std::mem::replace(&mut self.keepers, get_a_list(new_keepers, crate::node::IDEAL_NUMBER_OF_NEIGHBORS));
     
             if max_lcb > min_ucb {
-               let _= std::mem::replace(&mut self.keepers, new_keepers);
+               return victum; 
             }
+            None
         }
     }
-//////////////////////////////////////////////////////////
+pub fn get_a_list(keepers: HashMap<PeerID, f64>, length: usize) -> Vec<PeerID> {
+    let mut x: Vec<&PeerID> = keepers.keys().collect();
+    x.sort_by(|&a, &b| {
+        let left = keepers.get(a).cloned().unwrap();
+        let right = keepers.get(b).unwrap();
+        left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    x.truncate(length);
+    x.into_iter().map(|x| x.clone()).collect()
+}
+
+    //////////////////////////////////////////////////////////
 #[allow(dead_code)]
 fn main() {
     let con = 0.5;

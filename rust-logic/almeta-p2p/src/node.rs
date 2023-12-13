@@ -5,7 +5,7 @@ use crate::{OfferID, packet::PacketBody};
 use super::{LinkID, Command, ICE, direct_packet::DirectPacket, DirectBody, Packet, PeerID, Perigee, routing_entry::{RoutingCost, RoutingEntry}, Incoming, Outgoing};
 
 const PROTOCAL_VERSION: &str = concat!("Rust", ":", "0.1");
-const IDEAL_NUMBER_OF_NEIGHBORS: usize = 8;
+pub const IDEAL_NUMBER_OF_NEIGHBORS: usize = 8;
 #[derive(Debug)]
 struct LinkInfo {
     pub protocal_in: Option<String>,
@@ -169,6 +169,7 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
         logy!("trace", "{:?} received answer", self.my_id);
         self.command_queue.push_back(Command::AnswerOffer { link_id, answer });
     }
+    /*
     pub fn receive_direct(&mut self, link_id: &LinkID, packet: DirectPacket) {
         if let Some(link_info) = self.link_info.get(link_id) {
             match link_info.protocal_in {
@@ -199,9 +200,20 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
         }
 
     }
-    pub fn receive_direct_rust0_1(&mut self, link_id: &LinkID, packet: DirectPacket) {
+    */
+    pub fn receive_direct_rust0_1(&mut self, link_id: &LinkID, packet: DirectPacket, timestamp: crate::perigee::Observation) {
         logy!("traenode", "processing direct rust:0.1 packet");
         if packet.varify() {
+            match (
+                self.get_peer_id_from_link_id(link_id), 
+                u128::from_str_radix(
+                    &packet.md5,
+                    16
+                )
+             ) { 
+                (Some(peer_id), Ok(packet_id)) => self.perigee.observe(&peer_id, packet_id, timestamp),
+                _ => (),
+            };
             match packet.body {
                 DirectBody::DearJohn => {
                     let peer_id = unwrap_or_return!( self.get_peer_id_from_link_id(link_id));
@@ -346,6 +358,21 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
                     self.send_direct(link_id.clone(), DirectBody::Me { me: self.my_id.clone() }.into());
                 },
             };
+            if let Some(link_info) = self.link_info.get_mut(link_id) {
+                match (&link_info.protocal_out, &link_info.post_init_greeting) {
+                    (Some(_), false) => {
+                        logy!("debug", "should be sending post greating");
+                        link_info.post_init_greeting = true;
+                        self.post_greeting(link_id);    
+                    },
+                    _ => (),
+    
+                }
+            } else {
+                logy!("debug", "Cuoldn't get mut");
+    
+            }
+    
         }
     }
     pub fn receive_offer(&mut self, offer: Offer, offer_id: OfferID, peer: Option<PeerID>) -> LinkID {
@@ -362,6 +389,8 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
                 _ => {
                     if let Ok(packet) = serde_json::from_str::<Packet::<Answer, Offer>>(packet) {
                         self.receive_packet_rust0_1(link_id, packet, timestamp)
+                    } else if let Ok(packet) = serde_json::from_str::<DirectPacket>(packet) {
+                            self.receive_direct_rust0_1(link_id, packet, timestamp)
                     } else {
                         self.send_direct(link_id.clone(), DirectBody::InvalidPacket.into());
                     };                
@@ -554,7 +583,7 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
 impl<Answer, Offer> Node<Answer, Offer> {
     /// is_keeper() returns  true if we want to keep a connection to the peer and false if we don't mind disconnecting from them
     fn is_keeper(&self, peer_id: &PeerID) -> bool {
-        if self.perigee.keepers.len() < IDEAL_NUMBER_OF_NEIGHBORS {
+        if self.neighbors.len() < IDEAL_NUMBER_OF_NEIGHBORS {
             return true
         }
         self.perigee.is_keeper(peer_id)
@@ -632,11 +661,10 @@ impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Seria
 
 impl<'a, Answer: Clone + std::fmt::Debug + serde::Deserialize<'a> + serde::Serialize, Offer: Clone + serde::Deserialize<'a> + std::fmt::Debug + serde::Serialize> Node<Answer, Offer> {
     pub fn eval_neighbors(&mut self) {
-        self.perigee.perigee(0.5);
-        for (peer_id, link_id) in &self.neighbors {
-             if ! self.is_keeper(peer_id) {
+        if let Some(peer_id) = self.perigee.perigee(0.5) {
+            if let Some(link_id) = self.neighbors.get(&peer_id) {
                 Self::send_direct_inner(&mut self.command_queue, link_id.clone(), DirectBody::DearJohn.into());
-             }
+            }
         }
         let number_of_neighbors = self.neighbors.len();
         if number_of_neighbors > IDEAL_NUMBER_OF_NEIGHBORS {
