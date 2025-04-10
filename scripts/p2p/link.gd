@@ -53,8 +53,10 @@ func poll() -> Error:
 
 func send(msg:String) -> bool:
 	if channel.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
-		channel.put_packet(msg.to_utf8_buffer())
-		return true
+		if channel.put_packet(msg.to_utf8_buffer()) == OK:
+			return true
+		else:
+			return false
 	else:
 		return false
 

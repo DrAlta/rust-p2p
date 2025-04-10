@@ -10,13 +10,14 @@ mod ice;
 pub use ice::ICE;
 mod node;
 pub use node::Node;
+pub mod p2p_manet;
 pub mod packet;
 pub use packet::Packet;
 mod peer_id;
 pub use peer_id::PeerID;
-pub use perigee::Perigee;
+pub mod peerigee;
+pub use peerigee::Peerigee;
 pub mod routing_entry;
-pub mod perigee;
 mod user_json;
 pub use user_json::UserJSON;
 

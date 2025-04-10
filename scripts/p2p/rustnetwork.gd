@@ -98,7 +98,11 @@ func send(channel_id, packet: String):
 	if channel_id == 0:
 		print("Packet for user:", packet)
 	else:
-		links[channel_id].send(packet)
+		if not links[channel_id].send(packet):
+			if links[channel_id].get_ready_state() == WebRTCDataChannel.STATE_CLOSED:
+				rust_logic.channel_closed(channel_id)
+				rust_logic.send_failed(channel_id, packet)
+		
 
 
 func user_packet(packet: String):
